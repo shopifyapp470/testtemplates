@@ -2,7 +2,7 @@
 
 client_id = "5c20fc9ff28f26bb9f01df45b23e0da0"
 name = "testtemplate"
-application_url = "https://example.com"
+application_url = "https://your-app.onrender.com"
 embedded = true
 
 [build]
@@ -30,4 +30,4 @@ api_version = "2026-04"
 scopes = "read_customers,read_discounts,read_orders,read_price_rules,read_products,write_customers,write_discounts,write_orders,write_price_rules,write_products,read_themes,write_themes,read_content,write_content"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://your-app.onrender.com/api/auth" ]
