@@ -1,0 +1,229 @@
+{{ 'reward-style.css' | asset_url | stylesheet_tag }}
+
+<div class="reward-dashboard">
+  {% if customer %}
+    <div class="reward-hero-banner">
+      <div class="hero-left-content">
+        <div class="hero-icon-box"><img src="{{ 'Group.png' | asset_url }}" alt="Icon" width="45" height="45" loading="lazy"></div>
+        <div class="hero-content">
+          <h2>{{ block.settings.hero_title | default: "Your Reward Points" }}</h2>
+          <p>{{ block.settings.hero_subtitle | default: "You may redeem on your next purchase" }}</p>
+        </div>
+      </div>
+      <div class="hero-illustration">
+        {% if block.settings.hero_img != blank %}<img src="{{ block.settings.hero_img | image_url: width: 400 }}" alt="Illustration" height="285" width="412" loading="lazy">
+        {% else %}
+          <img src="{{ 'hero.png' | asset_url }}" alt="heroIllustration" height="285" width="412" loading="lazy">{% endif %}
+      </div>
+    </div>
+
+    <div class="reward-summary-grid">
+      <div class="summary-card">
+        <div class="summary-info"><span>Total Reward Points Balance</span><strong id="summary-total-balance">0</strong></div>
+        <div class="summary-icon">
+          {% if block.settings.icon_balance != blank %}<img src="{{ block.settings.icon_balance | image_url: '100x' }}" alt="Icon" width="56" height="56" loading="lazy">
+          {% else %}<img src="{{ 'wallet.png' | asset_url }}" alt="Wallet Icon" width="56" height="56" loading="lazy">{% endif %}
+        </div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-info"><span>Lifetime Savings Till Date</span><strong id="summary-lifetime-savings">0</strong></div>
+        <div class="summary-icon">
+          {% if block.settings.icon_savings != blank %}<img src="{{ block.settings.icon_savings | image_url: '100x' }}" alt="Icon" width="56" height="56" loading="lazy">
+          {% else %}<img src="{{ 'vector.png' | asset_url }}" alt="Savings Icon" width="56" height="56" loading="lazy">{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="history-container">
+      <div class="history-header">
+        <h3>Reward Points History</h3>
+        <div class="header-points-summary">
+          <div class="special-point-box"><span class="label">Birthday</span><span class="val" id="header-bday-points">0</span></div>
+          <div class="special-point-box"><span class="label">Anniversary</span><span class="val" id="header-anniv-points">0</span></div>
+          <div class="special-point-box"><span class="label">High Order</span><span class="val" id="header-high-order-points">0</span></div>
+        </div>
+      </div>
+      
+      <div class="tab-menu">
+        <div class="tab-item active" onclick="filterData('all', this)">All Activity</div>
+        <div class="tab-item" onclick="filterData('earned', this)">Earned</div>
+        <div class="tab-item" onclick="filterData('redeemed', this)">Redeemed</div>
+        <div class="tab-item" onclick="filterData('cancelled', this)">Cancelled</div> 
+      </div>
+
+      <div id="activity-list">
+        <div class="activity-loading" style="padding: 40px; text-align: center;">Fetching your activity...</div>
+      </div>
+    </div>
+
+    <div class="reward-info-footer">
+      <div class="redeem-banner">
+        <div class="redeem-content">
+          <h4>{{ block.settings.redeem_title | default: "How to Redeem" }}</h4>
+          <p>{{ block.settings.redeem_desc | default: "Redeem your points during checkout..." }}</p>
+        </div>
+        <div class="redeem-image">
+          {% if block.settings.redeem_img != blank %}<img src="{{ block.settings.redeem_img | image_url: width: 200 }}" alt="Redeem" width="200" height="96" loading="lazy">{% endif %}
+        </div>
+      </div>
+
+      <div class="policy-section">
+        <h4>{{ block.settings.policy_title | default: "Reward Points Policy" }}</h4>
+        <ul>
+          {% if block.settings.policy_1 != blank %}<li>{{ block.settings.policy_1 }}</li>{% endif %}
+          {% if block.settings.policy_2 != blank %}<li>{{ block.settings.policy_2 }}</li>{% endif %}
+          {% if block.settings.policy_3 != blank %}<li>{{ block.settings.policy_3 }}</li>{% endif %}
+        </ul>
+      </div>
+    </div>
+  {% else %}
+    <p style="text-align: center; padding: 50px;">Please <a href="{{ routes.account_login_url }}">login</a> to see rewards.</p>
+  {% endif %}
+</div>
+
+<script>
+  let allOrders = [];
+
+  document.addEventListener("DOMContentLoaded", async function() {
+    {% if customer %}
+      const proxyUrl = `/apps/public/order-history?logged_in_customer_id={{ customer.id }}&shop={{ shop.permanent_domain }}`;
+      try {
+        const response = await fetch(proxyUrl);
+        if (response.ok) {
+          const result = await response.json();
+          // API se milne wale orders ko store karein
+          allOrders = result.orders || [];
+          
+          document.getElementById('summary-total-balance').innerText = result.totalPoints || 0;
+          document.getElementById('summary-lifetime-savings').innerText = result.totalPoints || 0; 
+          document.getElementById('header-bday-points').innerText = result.birthdayPoint || 0;
+          document.getElementById('header-anniv-points').innerText = result.anniversaryPoint || 0;
+
+          // ==========================================
+          // LOGIC: FIRST ORDER HIGH REWARD ONLY
+          // ==========================================
+          let firstHighOrderPoints = 0;
+          
+          if (allOrders.length > 0) {
+            // Shopify API response descending hota hai (nayan order pehle).
+            // Isliye array ka last element hamesha customer ka "sabse pehla order" hota hai.
+            const oldestOrder = allOrders[allOrders.length - 1]; 
+            
+            if (oldestOrder && oldestOrder.status !== 'CANCELLED') {
+              firstHighOrderPoints = Number(oldestOrder.highRewardPoint) || 0;
+            }
+          }
+          
+          document.getElementById('header-high-order-points').innerText = firstHighOrderPoints;
+
+          renderList(allOrders);
+        }
+      } catch (e) { 
+        console.error("Reward fetch error:", e); 
+        document.getElementById('activity-list').innerHTML = "Failed to load activity.";
+      }
+    {% endif %}
+  });
+
+  function renderList(orders) {
+    const container = document.getElementById('activity-list');
+    if (!orders || orders.length === 0) { 
+      container.innerHTML = `<div style="padding:40px; text-align:center;">No records found.</div>`; 
+      return; 
+    }
+    
+    container.innerHTML = orders.map(order => {
+      let rows = '';
+      // Earned Points (Isme High Order aur Percentage dono included hain)
+      if (Number(order.pointsEarned) > 0) {
+        let orderTitle = order.orderNumber ? 'Order ' + order.orderNumber : 'Order';
+        rows += createActivityRow(orderTitle, order.createdAt, order.pointsEarned, 'earned');
+      }
+      // Redeemed Points
+      if (Number(order.pointsRedeemed) > 0 && order.status !== 'CANCELLED') {
+        rows += createActivityRow('Checkout Redemption', order.createdAt, order.pointsRedeemed, 'redeemed');
+      }
+      // Reverted Logic for Cancelled
+      if (order.status === 'CANCELLED' && Number(order.pointsRevert) > 0) {
+        rows += createActivityRow('Cancelled Order ' + (order.orderNumber || ''), order.createdAt, order.pointsRevert, 'cancelled');
+      }
+      return rows;
+    }).join('');
+  }
+
+  function createActivityRow(title, dateStr, points, type) {
+    const date = new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+    
+    let badgeClass = 'badge-earned';
+    let badgeText = 'Earned Points';
+    
+    if(type === 'redeemed') {
+      badgeClass = 'badge-used';
+      badgeText = 'Used Points';
+    } else if (type === 'cancelled') {
+      badgeClass = 'badge-cancelled';
+      badgeText = 'Cancelled Points';
+    }
+
+    return `<div class="activity-item">
+      <div class="activity-left">
+        <div class="activity-icon"><img src="{{ 'Group.png' | asset_url }}" width="42" height="42" loading="lazy"></div>
+        <div class="activity-info">
+          <div style="font-weight:700; font-size:18px; color:#374151;">${title}</div>
+          <div class="meta" style="display:flex; gap:20px; align-items:center;">
+            <span>${date}</span>
+            <span class="badge ${badgeClass}">${badgeText}</span>
+          </div>
+        </div>
+      </div>
+      <div class="activity-right">
+        <div class="points-value">${points}</div>
+        <div class="points-label">Points</div>
+      </div>
+    </div>`;
+  }
+
+  function filterData(type, el) {
+    document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    const listContainer = document.getElementById('activity-list');
+    listContainer.scrollTop = 0;
+    
+    let filtered = allOrders;
+    if (type === 'earned') {
+      filtered = allOrders.filter(o => Number(o.pointsEarned) > 0);
+    } else if (type === 'redeemed') {
+      filtered = allOrders.filter(o => Number(o.pointsRedeemed) > 0 && o.status !== 'CANCELLED');
+    } else if (type === 'cancelled') {
+      filtered = allOrders.filter(o => o.status === 'CANCELLED' && Number(o.pointsRevert) > 0);
+    }
+    
+    renderList(filtered);
+  }
+</script>
+
+{% schema %}
+{
+  "name": "Reward Order History",
+  "target": "section",
+  "settings": [
+    { "type": "header", "content": "Hero Banner" },
+    { "type": "image_picker", "id": "hero_img", "label": "Hero Banner Illustration" },
+    { "type": "text", "id": "hero_title", "label": "Hero Title", "default": "Your Reward Points" },
+    { "type": "text", "id": "hero_subtitle", "label": "Hero Subtitle", "default": "You may redeem on your next purchase" },
+    { "type": "header", "content": "Summary Card Icons" },
+    { "type": "image_picker", "id": "icon_balance", "label": "Total Balance Icon" },
+    { "type": "image_picker", "id": "icon_savings", "label": "Lifetime Savings Icon" },
+    { "type": "header", "content": "How to Redeem" },
+    { "type": "text", "id": "redeem_title", "label": "Redeem Title", "default": "How to Redeem" },
+    { "type": "textarea", "id": "redeem_desc", "label": "Redeem Description", "default": "Redeem your points during checkout..." },
+    { "type": "image_picker", "id": "redeem_img", "label": "Redeem Illustration Image" },
+    { "type": "header", "content": "Reward Policy" },
+    { "type": "text", "id": "policy_title", "label": "Policy Title", "default": "Reward Points Policy" },
+    { "type": "text", "id": "policy_1", "label": "Policy Line 1", "default": "Maximum points value cannot exceed order value" },
+    { "type": "text", "id": "policy_2", "label": "Policy Line 2", "default": "Reward Points never expire" },
+    { "type": "text", "id": "policy_3", "label": "Policy Line 3", "default": "Non-transferable between accounts" }
+   
+  ]
+}
+{% endschema %}

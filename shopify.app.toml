@@ -25,9 +25,22 @@ api_version = "2026-04"
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
 
+    [[webhooks.subscriptions]]
+  topics = [ "customers/update", "customers/create" ]
+  uri = "/webhookscutomer"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create", "orders/cancelled", "checkouts/update" ]
+  uri = "/webhooks/orders/create"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_customers,read_discounts,read_orders,read_price_rules,read_products,write_customers,write_discounts,write_orders,write_price_rules,write_products,read_themes,write_themes,read_content,write_content"
+scopes = "read_content,read_customers,read_discounts,read_orders,read_price_rules,read_products,read_themes,write_content,write_customers,write_discounts,write_orders,write_price_rules,write_products,write_themes"
 
 [auth]
 redirect_urls = [   "https://your-app.onrender.com/auth/callback",   "https://your-app.onrender.com/auth/shopify/callback",   "https://your-app.onrender.com/api/auth" ]
+
+[app_proxy]
+url = "https://zshops-ray-amendment-extra.trycloudflare.com/app/custom-proxy"
+subpath = "public"
+prefix = "apps"

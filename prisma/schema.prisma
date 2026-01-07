@@ -9,12 +9,12 @@ generator client {
 // enough when changing adapters.
 // See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model Session {
-  id            String    @id
+  id            String   @id @map("_id")
   shop          String
   state         String
   isOnline      Boolean   @default(false)
@@ -35,49 +35,63 @@ model Session {
 
 
 model Rewardpoint {
-  id            String         @id @default(cuid())
-  customerid    String
-  pointvalue    Int
-  pendingpoint  Int      @default(0)
-  activepoint   Int      @default(0)
-  store         String
+  // MongoDB ke liye auto-generated ID ka use karein
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  customerid   String
+  pointvalue   Int
+  pendingpoint Int       @default(0)
+  activepoint  Int       @default(0)
+  store        String
   customeremail String
-  dob           DateTime?
+  dob          DateTime?
   anniversaryDate DateTime?
   lastBirthdayRewardYear Int?
   lastAnniversaryRewardYear Int?
   birthdayPoint             Int      @default(0) 
   anniversaryPoint          Int      @default(0)
-  orders        OrderHistory[]
+  orders       OrderHistory[]
 }
 
 model OrderHistory {
-  id          String  @id @default(cuid())
-  orderId     String  @unique // शॉपिफाई की ऑर्डर आईडी (जैसे: "gid://shopify/Order/12345")
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  orderId         String    @unique
+  orderNumber     String?
+  status          String    @default("PENDING")
+  discountAmount  Float
+  couponCode      String?
+  pointsEarned    Int
+  pointsRedeemed  Int
+  pointsRevert    Int       @default(0)
+  highRewardPoint Int       @default(0)
+  subtotal        Float     @default(0.0)
+  productNames    String?
+  createdAt       DateTime  @default(now())
   
-  orderNumber String? // पढ़ने में आसान ऑर्डर नंबर (जैसे: "#1001")
-  status       String   @default("PENDING") // Values: "PENDING" or "PROCESSED"
-  discountAmount Float // कितना डिस्काउंट मिला
-  couponCode     String? // कौन सा कूपन कोड यूज़ हुआ (अगर कोई हो)
-  pointsEarned   Int // इस ऑर्डर से कितने पॉइंट्स मिले
-  pointsRedeemed Int // इस ऑर्डर में कितने पॉइंट्स यूज़ किए गए
-  pointsRevert   Int      @default(0)
-  highRewardPoint Int        @default(0)
-  subtotal       Float    @default(0.0)
-  productNames   String?
-  createdAt     DateTime    @default(now())
-  rewardPointId String
-  rewardPoint   Rewardpoint @relation(fields: [rewardPointId], references: [id])
+  // Relation IDs MongoDB mein String hoti hain
+  rewardPointId   String    @db.ObjectId
+  rewardPoint     Rewardpoint @relation(fields: [rewardPointId], references: [id])
 }
 // ✅ Table name: userbirthday
 model userbirthday {
-  id            String   @id @default(uuid())
-  shop          String   @unique  // <--- YE HONA BAHUT ZAROORI HAI
-  birthdayPoint Int      @default(0)
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  shop             String   @unique
+  birthdayPoint    Int      @default(0)
   anniversaryPoint Int      @default(0)
-  earnPercentage Int       @default(10)
-  minOrderTotal    Float    @default(10000.0) // Kitne amount par reward milega
-  fixedRewardPoint Int      @default(100)     // Kitne points milenge
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  earnPercentage   Int      @default(10)
+  redeemPercentage Int      @default(10)
+  minOrderTotal    Float    @default(10000.0)
+  fixedRewardPoint Int      @default(100)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+// ✅ CleverTap Configuration Table
+model CleverTapConfig {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  shop         String   @unique // Store URL (e.g., myshop.myshopify.com)
+  accountId    String   // X-CleverTap-Account-Id
+  passcode     String   // X-CleverTap-Passcode
+  walletId     String   // CT_WALLET_ID (e.g., 1198)
+  region       String   @default("in1") 
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

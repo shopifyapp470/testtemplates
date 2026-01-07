@@ -1,0 +1,214 @@
+{% comment %}
+  LOYALTY REDEEM DRAWER EXTENSION
+  Design: Matches image with custom asset icon 'Group.png'
+{% endcomment %}
+
+<div id="loyalty-extension-wrapper" style="display: none;">
+  <section class="app-proxy-section" style="padding: 10px 15px;">
+    
+    <div style="border: 2px solid #3498db; border-radius: 4px; overflow: hidden; background: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      
+      <div style="background-color: #e8fbf3; padding: 12px; display: flex; align-items: center; border-bottom: 1px solid #eee;">
+        <div style="width: 18px; height: 18px; border: 1.5px solid #444; border-radius: 3px; margin-right: 10px; display: flex; align-items: center; justify-content: center;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </div>
+        <span style="font-size: 14px; font-weight: 600; color: #333;">Redeem Reward Points</span>
+      </div>
+
+      <div id="proxy-app-container" style="padding: 15px;" 
+           data-customer-id="{{ customer.id }}" 
+           data-customer-name="{{ customer.name }}">
+        
+        {% if customer %}
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div style="font-size: 20px; font-weight: 700; color: #2d3436;">
+              Balance <span style="font-size: 12px; font-weight: 400; color: #636e72; margin-left: 4px;">(Reward Points)</span>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <img src="{{ 'Group.png' | asset_url }}" alt="Icon" heightstyle="width: 24px; height: 24px; object-fit: contain; display: block;">
+              <span id="points_balance_display" style="font-size: 22px; font-weight: 700; color: #2d3436;">...</span>
+            </div>
+          </div>
+
+          <div id="redeem_action_area" style="display: none;">
+            <div style="display: flex; gap: 10px;">
+              <div style="position: relative; flex: 1;">
+                <input type="number" id="user_input_value" 
+                       style="width: 100%; padding: 10px; border: 1px solid #dfe6e9; border-radius: 6px; font-size: 16px; font-weight: 700; color: #2d3436; outline: none;"
+                       placeholder="0">
+                <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #b2bec3; font-size: 13px;">Points</span>
+              </div>
+              
+              <button type="button" id="btn_submit_redeem" onclick="submitCustomerData()" 
+                      style="background-color: {{ block.settings.button_bg_color | default: '#d63384' }}; color: {{ block.settings.button_text_color | default: '#ffffff' }}; padding: 0 20px; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; transition: 0.2s;">
+                Redeem
+              </button>
+            </div>
+            <div id="input_validation_error" style="color: #e74c3c; font-size: 12px; margin-top: 5px; display: none;"></div>
+          </div>
+
+          <div id="api_response_message" style="margin-top: 12px; font-size: 13px;"></div>
+          <div id="api_loading" style="display:none; margin-top:10px; font-size: 12px; color: #636e72;">Processing your reward...</div>
+
+        {% else %}
+          <div style="text-align: center; padding: 10px;">
+            <p style="font-size: 14px; color: #636e72;">Login to view and redeem points.</p>
+            <a href="{{ routes.account_login_url }}" style="color: #3498db; text-decoration: none; font-weight: 600;">Login Now →</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  initExtension();
+});
+
+function initExtension() {
+  const source = document.getElementById('loyalty-extension-wrapper');
+  const targetSelector = '.drawer__cart-items-wrapper'; 
+  
+  const moveElement = () => {
+    const target = document.querySelector(targetSelector);
+    if (target && source && !document.getElementById('injected-loyalty-app')) {
+      const appContainer = document.createElement('div');
+      appContainer.id = 'injected-loyalty-app';
+      appContainer.innerHTML = source.innerHTML; 
+      target.insertAdjacentElement('afterend', appContainer);
+      
+      const container = appContainer.querySelector('#proxy-app-container');
+      if(container) {
+        fetchCustomerPoints();
+        setupInputValidation();
+      }
+    }
+  };
+
+  moveElement();
+  const observer = new MutationObserver(() => { moveElement(); });
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function fetchCustomerPoints() {
+  const wrapper = document.getElementById('injected-loyalty-app');
+  if (!wrapper || !wrapper.querySelector('#proxy-app-container')) return;
+
+  const pointsDisplay = wrapper.querySelector('#points_balance_display');
+  const actionArea = wrapper.querySelector('#redeem_action_area');
+  const inputField = wrapper.querySelector('#user_input_value');
+  const customerId = wrapper.querySelector('#proxy-app-container').getAttribute('data-customer-id');
+
+  if (!customerId) return;
+
+  fetch(`/apps/public?customerId=${customerId}`)
+  .then(res => res.json())
+  .then(data => {
+    if (data.success && data.pointvalue > 0) {
+      pointsDisplay.innerText = data.pointvalue;
+      inputField.setAttribute('data-max-points', data.pointvalue);
+      inputField.value = data.pointvalue; 
+      actionArea.style.display = "block";
+    } else {
+      pointsDisplay.innerText = "0";
+      actionArea.style.display = "none";
+    }
+  })
+  .catch(() => {
+    pointsDisplay.innerText = "Error";
+  });
+}
+
+function setupInputValidation() {
+  const wrapper = document.getElementById('injected-loyalty-app');
+  if (!wrapper) return;
+  const inputField = wrapper.querySelector('#user_input_value');
+  const submitBtn = wrapper.querySelector('#btn_submit_redeem');
+  const errorDiv = wrapper.querySelector('#input_validation_error');
+
+  inputField.addEventListener('input', function() {
+    const currentValue = parseInt(this.value) || 0;
+    const maxPoints = parseInt(this.getAttribute('data-max-points') || 0);
+
+    if (currentValue > maxPoints) {
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = "0.5";
+      errorDiv.innerText = `Insufficient balance (Max: ${maxPoints})`;
+      errorDiv.style.display = 'block';
+    } else {
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = "1";
+      errorDiv.style.display = 'none';
+    }
+  });
+}
+
+function submitCustomerData() {
+  const wrapper = document.getElementById('injected-loyalty-app');
+  const inputField = wrapper.querySelector('#user_input_value');
+  const responseDiv = wrapper.querySelector('#api_response_message');
+  const loadingDiv = wrapper.querySelector('#api_loading');
+  const customerId = wrapper.querySelector('#proxy-app-container').getAttribute('data-customer-id');
+
+  if (!inputField.value || inputField.value <= 0) {
+    alert("Please enter a valid amount of points.");
+    return;
+  }
+
+  loadingDiv.style.display = 'block';
+  responseDiv.innerText = '';
+
+  fetch('/apps/public', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ customerId: customerId, userValue: inputField.value })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if(data.success) {
+      const couponCode = data.discountTitle;
+      localStorage.setItem('active_reward', JSON.stringify({ code: couponCode, owner: customerId }));
+
+      fetch(`/discount/${couponCode}`).then(() => {
+        fetch(window.location.href)
+          .then(response => response.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const selectors = ['.drawer__inner', '.cart-drawer__footer', '#CartDrawer-Form', '.totals'];
+            
+            selectors.forEach(selector => {
+              const newEl = doc.querySelector(selector);
+              const oldEl = document.querySelector(selector);
+              if (newEl && oldEl) oldEl.innerHTML = newEl.innerHTML;
+            });
+            
+            loadingDiv.style.display = 'none';
+            responseDiv.innerHTML = `<span style="color: #27ae60;">✔ Coupon <b>${couponCode}</b> applied!</span>`;
+            fetchCustomerPoints();
+          });
+      });
+    } else {
+      loadingDiv.style.display = 'none';
+      responseDiv.innerHTML = `<span style="color: #e74c3c;">${data.message || 'Error redeeming points'}</span>`;
+    }
+  })
+  .catch(() => {
+    loadingDiv.style.display = 'none';
+    responseDiv.innerText = "Connection error.";
+  });
+}
+</script>
+
+{% schema %}
+{
+  "name": "Reward Point Drawer",
+  "target": "body",
+  "settings": [
+    { "type": "color", "id": "button_bg_color", "label": "Redeem Button Color", "default": "#d63384" },
+    { "type": "color", "id": "button_text_color", "label": "Button Text Color", "default": "#ffffff" }
+  ]
+}
+{% endschema %}

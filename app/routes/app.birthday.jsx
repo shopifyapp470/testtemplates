@@ -2,29 +2,16 @@ import { useState, useEffect } from "react";
 // ✅ React Router v7 Imports
 import { Form, useLoaderData, useActionData, useNavigation, data } from "react-router";
 
-import { 
-  Page, 
-  Layout, 
-  Card, 
-  FormLayout, 
-  TextField, 
-  Button, 
-  Banner, 
-  Text, 
-  AppProvider,
-  BlockStack 
-} from "@shopify/polaris";
+import { Page, Layout, Card, FormLayout, TextField, Button, Banner, Text, AppProvider,BlockStack } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
-
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
 // ==========================================
-// 1. LOADER (Fetch Values)
+// 1. LOADER (Fetch Values from DB)
 // ==========================================
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  
   const settings = await db.userbirthday.findUnique({
     where: { shop: session.shop },
   });
@@ -33,13 +20,13 @@ export const loader = async ({ request }) => {
     birthdayPoint: settings?.birthdayPoint || 0,
     anniversaryPoint: settings?.anniversaryPoint || 0,
     earnPercentage: settings?.earnPercentage || 10,
+    redeemPercentage: settings?.redeemPercentage || 10, // New Field
     minOrderTotal: settings?.minOrderTotal || 10000,
     fixedRewardPoint: settings?.fixedRewardPoint || 100
   };
 };
-
 // ==========================================
-// 2. ACTION (Save Values)
+// 2. ACTION (Save Values to DB)
 // ==========================================
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -48,9 +35,10 @@ export const action = async ({ request }) => {
   const updateData = {
     birthdayPoint: parseInt(formData.get("birthdayPoint") || "0"),
     anniversaryPoint: parseInt(formData.get("anniversaryPoint") || "0"),
-    earnPercentage: parseInt(formData.get("earnPercentage") || "10"),
-    minOrderTotal: parseFloat(formData.get("minOrderTotal") || "10000"),
-    fixedRewardPoint: parseInt(formData.get("fixedRewardPoint") || "100"),
+    earnPercentage: parseInt(formData.get("earnPercentage") || "0"),
+    redeemPercentage: parseInt(formData.get("redeemPercentage") || "0"),
+    minOrderTotal: parseFloat(formData.get("minOrderTotal") || "0"),
+    fixedRewardPoint: parseInt(formData.get("fixedRewardPoint") || "0"),
   };
 
   try {
@@ -59,7 +47,6 @@ export const action = async ({ request }) => {
       update: updateData,
       create: { shop: session.shop, ...updateData },
     });
-    // ✅ Use 'data' from react-router
     return data({ status: "success" });
   } catch (error) {
     console.error("❌ [DB SAVE ERROR]", error);
@@ -74,20 +61,21 @@ export default function BirthdayPage() {
   const loaderData = useLoaderData();
   const actionData = useActionData();
   const nav = useNavigation();
-
   // --- States ---
   const [bPoints, setBPoints] = useState(loaderData.birthdayPoint);
   const [aPoints, setAPoints] = useState(loaderData.anniversaryPoint);
   const [earnPct, setEarnPct] = useState(loaderData.earnPercentage);
+  const [redeemPct, setRedeemPct] = useState(loaderData.redeemPercentage);
   const [minOrder, setMinOrder] = useState(loaderData.minOrderTotal);
   const [fPoints, setFPoints] = useState(loaderData.fixedRewardPoint);
 
-  // Sync with Loader Data
+  // Sync with Loader Data (Refresh UI when data changes)
   useEffect(() => {
     if (loaderData) {
       setBPoints(loaderData.birthdayPoint);
       setAPoints(loaderData.anniversaryPoint);
       setEarnPct(loaderData.earnPercentage);
+      setRedeemPct(loaderData.redeemPercentage);
       setMinOrder(loaderData.minOrderTotal);
       setFPoints(loaderData.fixedRewardPoint);
     }
@@ -100,20 +88,27 @@ export default function BirthdayPage() {
       <Page title="Reward Strategy Settings">
         <Layout>
           <Layout.Section>
-            
+            {/* Success Banner */}
             {actionData?.status === "success" && (
-              <div style={{ marginBottom: "1rem" }}>
-                <Banner title="Settings Saved" tone="success">
-                  <p>All reward points, thresholds, and expiry settings updated.</p>
+              <div style={{ marginBottom: "20px" }}>
+                <Banner title="Settings Saved" tone="success" onDismiss={() => {}}>
+                  <p>All reward points, thresholds, and strategy settings have been updated successfully.</p>
                 </Banner>
               </div>
             )}
-
+            {/* Error Banner */}
+            {actionData?.status === "error" && (
+              <div style={{ marginBottom: "20px" }}>
+                <Banner title="Save Failed" tone="critical">
+                  <p>{actionData.message}</p>
+                </Banner>
+              </div>
+            )}
             <Card>
               <Form method="post">
-                <FormLayout>
+                <FormLayout>    
                   {/* --- SECTION 1: EVENT REWARDS --- */}
-                  <Text variant="headingMd" as="h2">Event Rewards</Text>
+                  <Text variant="headingMd" as="h2">Special Event Rewards</Text>
                   <BlockStack gap="400">
                     <TextField
                       label="Birthday Points"
@@ -122,6 +117,7 @@ export default function BirthdayPage() {
                       value={String(bPoints)}
                       onChange={(v) => setBPoints(v)}
                       autoComplete="off"
+                      helpText="Points awarded on customer's birthday"
                     />
                     <TextField
                       label="Anniversary Points"
@@ -130,9 +126,9 @@ export default function BirthdayPage() {
                       value={String(aPoints)}
                       onChange={(v) => setAPoints(v)}
                       autoComplete="off"
+                      helpText="Points awarded on account anniversary"
                     />
                   </BlockStack>
-
                   {/* --- SECTION 2: HIGH VALUE ORDERS --- */}
                   <div style={{ marginTop: '20px' }}>
                     <Text variant="headingMd" as="h2">High Value Order Rewards</Text>
@@ -154,28 +150,39 @@ export default function BirthdayPage() {
                       name="fixedRewardPoint"
                       value={String(fPoints)}
                       onChange={(v) => setFPoints(v)}
-                      helpText="Points to give if order is above threshold"
+                      helpText="Extra points awarded if order is above threshold"
                       autoComplete="off"
                     />
                   </BlockStack>
-
-                  {/* --- SECTION 3: GENERAL --- */}
+                  {/* --- SECTION 3: GENERAL EARNING --- */}
                   <div style={{ marginTop: '20px' }}>
-                    <Text variant="headingMd" as="h2">General Earning</Text>
+                    <Text variant="headingMd" as="h2">Earning Strategy</Text>
                   </div>
-                  <TextField
-                    label="Earning Percentage (%)"
-                    type="number"
-                    name="earnPercentage"
-                    value={String(earnPct)}
-                    onChange={(v) => setEarnPct(v)}
-                    suffix="%"
-                     helpText="Set points percentage. Example: 10 means user gets 10 points on 100 INR order (10%)."
-                    autoComplete="off"
-                  />
-
+                  <BlockStack gap="400">
+                    <TextField
+                      label="Earning Percentage for First Order (%)"
+                      type="number"
+                      name="earnPercentage"
+                      value={String(earnPct)}
+                      onChange={(v) => setEarnPct(v)}
+                      suffix="%"
+                      helpText="Points calculation for the very first order."
+                      autoComplete="off"
+                    />
+                    {/* <TextField
+                      label="Earning Percentage for Subsequent/Redeem Orders (%)"
+                      type="number"
+                      name="redeemPercentage"
+                      value={String(redeemPct)}
+                      onChange={(v) => setRedeemPct(v)}
+                      suffix="%"
+                      helpText="Points calculation for orders where points might be used or regular orders."
+                      autoComplete="off"
+                    /> */}
+                  </BlockStack>
+                  {/* --- SAVE BUTTON --- */}
                   <div style={{ marginTop: '24px' }}>
-                    <Button submit primary loading={isSaving}>
+                    <Button submit variant="primary" loading={isSaving}>
                       Save All Settings
                     </Button>
                   </div>

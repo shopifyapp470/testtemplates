@@ -7,6 +7,43 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 import { syncRewardTemplate } from "./lib/theme-sync.server";
+import { Session } from "@shopify/shopify-api";
+
+const customSessionStorage = {
+  storeSession: async (session) => {
+    const data = session.toObject();
+    const id = data.id;
+    
+    // MongoDB ke liye 'id' ko update block se hatana zaroori hai
+    const { id: _id, ...updateData } = data; 
+
+    await prisma.session.upsert({
+      where: { id },
+      update: updateData, // 'id' yahan nahi jayega, isliye error nahi aayegi
+      create: data,       // create mein 'id' hona zaroori hai
+    });
+    return true;
+  },
+  loadSession: async (id) => {
+    const sessionData = await prisma.session.findUnique({ where: { id } });
+    if (sessionData) {
+      return new Session(sessionData);
+    }
+    return undefined;
+  },
+  deleteSession: async (id) => {
+    await prisma.session.delete({ where: { id } });
+    return true;
+  },
+  deleteSessions: async (ids) => {
+    await prisma.session.deleteMany({ where: { id: { in: ids } } });
+    return true;
+  },
+  findSessionsByShop: async (shop) => {
+    const sessions = await prisma.session.findMany({ where: { shop } });
+    return sessions.map((session) => new Session(session));
+  },
+};
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -17,6 +54,8 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
+   // ✅ Naya custom storage yahan use karein
+  sessionStorage: customSessionStorage, 
 
   // after app
   hooks: {
