@@ -1,8 +1,10 @@
+// app/routes/theme-sync.server.js
+
 export async function syncRewardTemplate(admin, session) {
   const { shop, accessToken } = session;
-  const APP_HANDLE = "testtemplated"; // shopify.app.toml wala handle yaha likhein
-  const BLOCK_HANDLE = "testtemplated";
- 
+  const APP_HANDLE = "my-reward-app"; // shopify.app.toml wala handle yaha likhein
+  const BLOCK_HANDLE = "reward";
+
   try {
     // ✅ STEP 1: GraphQL se Active Theme ID fetch karna (REST ki error fix karne ke liye)
     const themeResponse = await admin.graphql(`
@@ -15,25 +17,25 @@ export async function syncRewardTemplate(admin, session) {
         }
       }
     `);
- 
+
     const themeData = await themeResponse.json();
     const mainTheme = themeData.data?.themes?.nodes.find(t => t.role === "MAIN");
-   
- 
+    
+
     if (!mainTheme) {
       throw new Error("Active theme nahi mila.");
     }
- 
+
     // GraphQL ID format "gid://shopify/Theme/123456" hota hai, hume sirf number chahiye
     const THEME_ID = mainTheme.id.split("/").pop();
- 
-   
- 
+
+    
+
     // 2. Physical .json file content tayyar karna
     const templateJSON = {
       "sections": {
         "main": {
-          "type": "main-page",
+          "type": "main-page", 
           "disabled": true,
           "settings": {
             "padding_top": 36,
@@ -44,7 +46,7 @@ export async function syncRewardTemplate(admin, session) {
           "type": "apps",
           "blocks": {
             "reward_app_block": {
-              "type": `shopify://apps/${APP_HANDLE}/blocks/${BLOCK_HANDLE}`,
+              "type": "shopify://apps/${APP_HANDLE}/blocks/${BLOCK_HANDLE}",
               "settings": {
                 "hero_title": "Your Reward Points",
                 "hero_subtitle": "You may redeem on your next purchase",
@@ -65,10 +67,10 @@ export async function syncRewardTemplate(admin, session) {
       },
       "order": ["main", "reward_apps_container"]
     };
- 
+
     // 3. REST API: templates/page.reward-redeem.json create/update karna
-    const assetUrl = `https://${shop}/admin/api/2025-10/themes/${THEME_ID}/assets.json`;
-   
+    const assetUrl = `https://${shop}/admin/api/2025-01/themes/${THEME_ID}/assets.json`;
+    
     const assetResponse = await fetch(assetUrl, {
       method: "PUT",
       headers: {
@@ -82,12 +84,12 @@ export async function syncRewardTemplate(admin, session) {
         },
       }),
     });
- 
+
     if (!assetResponse.ok) {
       const errorText = await assetResponse.text();
       // 'main-page' fallback logic
       if (errorText.includes("main-page")) {
-          templateJSON.sections.main.type = "page";
+          templateJSON.sections.main.type = "page"; 
           await fetch(assetUrl, {
              method: "PUT",
              headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
@@ -97,7 +99,7 @@ export async function syncRewardTemplate(admin, session) {
         throw new Error(`Asset API Error: ${errorText}`);
       }
     }
- 
+
     // 4. GraphQL: Page create karna
     await admin.graphql(
       `#graphql
@@ -118,7 +120,7 @@ export async function syncRewardTemplate(admin, session) {
         },
       }
     );
- 
+
     return { success: true, themeId: THEME_ID };
   } catch (error) {
     console.error("❌ Sync Error Fixed:", error.message);
