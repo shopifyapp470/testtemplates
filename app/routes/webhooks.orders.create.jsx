@@ -1,6 +1,6 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { updateCleverTapWallet, sendCleverTapEvent, processPendingToActive } from "./clevertap.server";
+import { updateCleverTapWallet, sendCleverTapEvent, processPendingToActive } from "../utils/clevertap.server";
 
 export const action = async ({ request }) => {
   const { admin, topic, shop, payload } = await authenticate.webhook(request);

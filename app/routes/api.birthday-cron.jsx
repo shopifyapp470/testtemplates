@@ -1,6 +1,6 @@
 import { data } from "react-router"; 
 import db from "../db.server";
-import { updateCleverTapWallet, sendCleverTapEvent } from "./clevertap.server";
+import { updateCleverTapWallet, sendCleverTapEvent } from "../utils/clevertap.server";
 
 export const loader = async ({ request }) => {
   console.log("\n🎁 [DAILY CRON START] Checking Birthdays & Anniversaries...");
