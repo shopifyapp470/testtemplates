@@ -123,6 +123,8 @@ export const action = async ({ request }) => {
   
   if (!session) return data({ error: "Unauthorized" }, { status: 401 });
 
+  const shop = session.shop;
+
   const url = new URL(request.url);
   const verifiedCustomerId = url.searchParams.get("logged_in_customer_id");
 
@@ -136,8 +138,6 @@ export const action = async ({ request }) => {
     const settings = await db.userbirthday.findFirst({ where: { shop: shop } });
     const ratio = settings?.allearnPercentage ? parseFloat(settings.allearnPercentage) / 100 : 0.10;
     const discountAmount = (pointsToRedeem * ratio).toFixed(2);
-
-    const shop = session.shop;
 
     // 1. Check points for the VERIFIED customer
     const rewardRecord = await db.rewardpoint.findFirst({
