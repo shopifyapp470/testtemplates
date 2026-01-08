@@ -46,7 +46,7 @@ export async function syncRewardTemplate(admin, session) {
           "type": "apps",
           "blocks": {
             "reward_app_block": {
-              "type": "shopify://apps/${APP_HANDLE}/blocks/${BLOCK_HANDLE}",
+              "type": `shopify://apps/${APP_HANDLE}/blocks/${BLOCK_HANDLE}`,
               "settings": {
                 "hero_title": "Your Reward Points",
                 "hero_subtitle": "You may redeem on your next purchase",
