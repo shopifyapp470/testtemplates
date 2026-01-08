@@ -132,6 +132,10 @@ export const action = async ({ request }) => {
 
   try {
     const { userValue } = await request.json();
+    const pointsToRedeem = parseFloat(userValue);
+    const discountAmount = (pointsToRedeem / 10).toFixed(2); 
+
+
     const shop = session.shop;
 
     // 1. Check points for the VERIFIED customer
@@ -169,7 +173,7 @@ export const action = async ({ request }) => {
                 customers: { add: [`gid://shopify/Customer/${verifiedCustomerId}`] } 
             },
             customerGets: {
-              value: { discountAmount: { amount: formattedAmount, appliesOnEachItem: false } },
+              value: { discountAmount: { amount: discountAmount, appliesOnEachItem: false } },
               items: { all: true }
             },
             appliesOncePerCustomer: true,
