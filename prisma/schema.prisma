@@ -78,6 +78,7 @@ model userbirthday {
   birthdayPoint    Int      @default(0)
   anniversaryPoint Int      @default(0)
   earnPercentage   Int      @default(10)
+  allearnPercentage Int      @default(10)
   redeemPercentage Int      @default(10)
   minOrderTotal    Float    @default(10000.0)
   fixedRewardPoint Int      @default(100)

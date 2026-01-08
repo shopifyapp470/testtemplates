@@ -20,6 +20,7 @@ export const loader = async ({ request }) => {
     birthdayPoint: settings?.birthdayPoint || 0,
     anniversaryPoint: settings?.anniversaryPoint || 0,
     earnPercentage: settings?.earnPercentage || 10,
+    allearnPercentage: settings?.allearnPercentage || 10,
     redeemPercentage: settings?.redeemPercentage || 10, // New Field
     minOrderTotal: settings?.minOrderTotal || 10000,
     fixedRewardPoint: settings?.fixedRewardPoint || 100
@@ -36,6 +37,7 @@ export const action = async ({ request }) => {
     birthdayPoint: parseInt(formData.get("birthdayPoint") || "0"),
     anniversaryPoint: parseInt(formData.get("anniversaryPoint") || "0"),
     earnPercentage: parseInt(formData.get("earnPercentage") || "0"),
+    allearnPercentage: parseInt(formData.get("allearnPercentage") || "0"),
     redeemPercentage: parseInt(formData.get("redeemPercentage") || "0"),
     minOrderTotal: parseFloat(formData.get("minOrderTotal") || "0"),
     fixedRewardPoint: parseInt(formData.get("fixedRewardPoint") || "0"),
@@ -65,6 +67,7 @@ export default function BirthdayPage() {
   const [bPoints, setBPoints] = useState(loaderData.birthdayPoint);
   const [aPoints, setAPoints] = useState(loaderData.anniversaryPoint);
   const [earnPct, setEarnPct] = useState(loaderData.earnPercentage);
+  const [allearnPct, setAllearnPct] = useState(loaderData.allearnPercentage);
   const [redeemPct, setRedeemPct] = useState(loaderData.redeemPercentage);
   const [minOrder, setMinOrder] = useState(loaderData.minOrderTotal);
   const [fPoints, setFPoints] = useState(loaderData.fixedRewardPoint);
@@ -75,6 +78,7 @@ export default function BirthdayPage() {
       setBPoints(loaderData.birthdayPoint);
       setAPoints(loaderData.anniversaryPoint);
       setEarnPct(loaderData.earnPercentage);
+      setAllearnPct(loaderData.allearnPercentage);
       setRedeemPct(loaderData.redeemPercentage);
       setMinOrder(loaderData.minOrderTotal);
       setFPoints(loaderData.fixedRewardPoint);
@@ -179,6 +183,18 @@ export default function BirthdayPage() {
                       helpText="Points calculation for orders where points might be used or regular orders."
                       autoComplete="off"
                     /> */}
+                  </BlockStack>
+                   <BlockStack gap="400">
+                    <TextField
+                      label="Earning Percentage for all Order (%)"
+                      type="number"
+                      name="allearnPercentage"
+                      value={String(allearnPct)}
+                      onChange={(v) => setAllearnPct(v)}
+                      suffix="%"
+                      helpText="Points calculation for the very all order."
+                      autoComplete="off"
+                    />
                   </BlockStack>
                   {/* --- SAVE BUTTON --- */}
                   <div style={{ marginTop: '24px' }}>
