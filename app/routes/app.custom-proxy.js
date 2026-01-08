@@ -133,8 +133,9 @@ export const action = async ({ request }) => {
   try {
     const { userValue } = await request.json();
     const pointsToRedeem = parseFloat(userValue);
-    const discountAmount = (pointsToRedeem / 10).toFixed(2); 
-
+    const settings = await db.userbirthday.findFirst({ where: { shop: shop } });
+    const ratio = settings?.allearnPercentage ? parseFloat(settings.allearnPercentage) / 100 : 0.10;
+    const discountAmount = (pointsToRedeem * ratio).toFixed(2);
 
     const shop = session.shop;
 
