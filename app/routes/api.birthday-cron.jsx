@@ -3,7 +3,7 @@ import db from "../db.server";
 import { updateCleverTapWallet, sendCleverTapEvent } from "../utils/clevertap.server";
 
 export const loader = async ({ request }) => {
-  console.log("\n🎁 [DAILY CRON START] Checking Birthdays & Anniversaries...");
+  console.log("\n🎁 [DAILY CRON START] Checking Birthdays & Anniversaries....");
   try {
     //const today = new Date();
     const today = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
