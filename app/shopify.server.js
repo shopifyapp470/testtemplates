@@ -57,6 +57,15 @@ const shopify = shopifyApp({
    // ✅ Naya custom storage yahan use karein
   sessionStorage: customSessionStorage, 
 
+  webhooks: {     
+    APP_UNINSTALLED: 
+    {       
+      deliveryMethod: DeliveryMethod.Http,       
+      callbackUrl: "/webhooks/app/uninstalled", 
+    },
+   },
+ 
+
   // after app
   hooks: {
     afterAuth: async ({ admin, session }) => {
