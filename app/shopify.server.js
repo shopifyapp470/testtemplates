@@ -7,7 +7,7 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 import { syncRewardTemplate } from "./lib/theme-sync.server";
-import { Session } from "@shopify/shopify-api";
+import { DeliveryMethod, Session } from "@shopify/shopify-api";
 
 const customSessionStorage = {
   storeSession: async (session) => {
