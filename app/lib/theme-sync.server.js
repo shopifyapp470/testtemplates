@@ -112,8 +112,8 @@ export async function syncRewardTemplate(admin, session) {
       {
         variables: {
           page: {
-            title: "My Rewards123",
-            handle: "my-rewards123",
+            title: "My Rewards",
+            handle: "my-rewards",
             isPublished: true,
             templateSuffix: "reward-redeem"
           },
