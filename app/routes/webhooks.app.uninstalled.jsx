@@ -4,7 +4,7 @@ import { deleteRewardTemplate } from "../lib/theme-file-delete.js";
 
 
 export const action = async ({ request }) => {
-  const { shop, session, topic } = await authenticate.webhook(request);
+  const { shop, session, topic, admin } = await authenticate.webhook(request);
 
   console.log(`Received ${topic} webhook for ${shop}`);
 
