@@ -1,11 +1,12 @@
 {% comment %}
-  LOYALTY REDEEM DRAWER EXTENSION
-  Design: Matches image with custom asset icon 'Group.png'
+  LOYALTY REDEEM DRAWER - ADVANCED VERSION
+  - Disables UI instead of hiding after discount
+  - Auto-re-enables if discount is removed from cart/checkout
+  - Syncs state on cart changes
 {% endcomment %}
 
 <div id="loyalty-extension-wrapper" style="display: none;">
   <section class="app-proxy-section" style="padding: 10px 15px;">
-    
     <div style="border: 2px solid #3498db; border-radius: 4px; overflow: hidden; background: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
       
       <div style="background-color: #e8fbf3; padding: 12px; display: flex; align-items: center; border-bottom: 1px solid #eee;">
@@ -15,23 +16,19 @@
         <span style="font-size: 14px; font-weight: 600; color: #333;">Redeem Reward Points</span>
       </div>
 
-      <div id="proxy-app-container" style="padding: 15px;" 
-           data-customer-id="{{ customer.id }}" 
-           data-customer-name="{{ customer.name }}">
-        
+      <div id="proxy-app-container" style="padding: 15px;" data-customer-id="{{ customer.id }}">
         {% if customer %}
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
             <div style="font-size: 20px; font-weight: 700; color: #2d3436;">
               Balance <span style="font-size: 12px; font-weight: 400; color: #636e72; margin-left: 4px;">(Reward Points)</span>
             </div>
-            
             <div style="display: flex; align-items: center; gap: 8px;">
-              <img src="{{ 'Group.png' | asset_url }}" alt="Icon" heightstyle="width: 24px; height: 24px; object-fit: contain; display: block;">
+              <img src="{{ 'Group.png' | asset_url }}" alt="Icon" style="width: 24px; height: 24px; object-fit: contain; display: block;">
               <span id="points_balance_display" style="font-size: 22px; font-weight: 700; color: #2d3436;">...</span>
             </div>
           </div>
 
-          <div id="redeem_action_area" style="display: none;">
+          <div id="redeem_action_area">
             <div style="display: flex; gap: 10px;">
               <div style="position: relative; flex: 1;">
                 <input type="number" id="user_input_value" 
@@ -39,23 +36,26 @@
                        placeholder="0">
                 <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #b2bec3; font-size: 13px;">Points</span>
               </div>
-              
               <button type="button" id="btn_submit_redeem" onclick="submitCustomerData()" 
-                      style="background-color: {{ block.settings.button_bg_color | default: '#d63384' }}; color: {{ block.settings.button_text_color | default: '#ffffff' }}; padding: 0 20px; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; transition: 0.2s;">
+                      style="background-color: {{ block.settings.button_bg_color | default: '#d63384' }}; color: {{ block.settings.button_text_color | default: '#ffffff' }}; padding: 0 20px; border: none; border-radius: 6px; font-weight: 700; cursor: pointer;">
                 Redeem
               </button>
             </div>
-            <div id="input_validation_error" style="color: #e74c3c; font-size: 12px; margin-top: 5px; display: none;"></div>
+            <div id="input_validation_error" style="color: #e74c3c; font-size: 12px; margin-top: 8px; font-weight: 500; display: none;"></div>
           </div>
 
-          <div id="api_response_message" style="margin-top: 12px; font-size: 13px;"></div>
-          <div id="api_loading" style="display:none; margin-top:10px; font-size: 12px; color: #636e72;">Processing your reward...</div>
+          <div id="api_response_message" style="margin-top: 12px; font-size: 14px;"></div>
+          
+          <div id="coupon_tag_area" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; display: none;">
+             <div style="display: flex; align-items: center; background: #fee2e2; padding: 10px 12px; border-radius: 6px; border: 1.5px dashed #ef4444;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" style="margin-right: 10px;"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+                <span id="active_coupon_text" style="font-size: 14px; color: #b91c1c; font-weight: 700; letter-spacing: 1px;"></span>
+             </div>
+          </div>
 
+          <div id="api_loading" style="display:none; margin-top:10px; font-size: 12px; color: #636e72;">Processing...</div>
         {% else %}
-          <div style="text-align: center; padding: 10px;">
-            <p style="font-size: 14px; color: #636e72;">Login to view and redeem points.</p>
-            <a href="{{ routes.account_login_url }}" style="color: #3498db; text-decoration: none; font-weight: 600;">Login Now →</a>
-          </div>
+          <p style="text-align: center; color: #636e72;">Please login to see rewards.</p>
         {% endif %}
       </div>
     </div>
@@ -63,6 +63,8 @@
 </div>
 
 <script>
+let isSubmitting = false;
+
 document.addEventListener("DOMContentLoaded", function() {
   initExtension();
 });
@@ -78,47 +80,86 @@ function initExtension() {
       appContainer.id = 'injected-loyalty-app';
       appContainer.innerHTML = source.innerHTML; 
       target.insertAdjacentElement('afterend', appContainer);
-      
-      const container = appContainer.querySelector('#proxy-app-container');
-      if(container) {
-        fetchCustomerPoints();
-        setupInputValidation();
-      }
+      fetchCustomerPoints();
+      setupInputValidation();
     }
   };
 
   moveElement();
-  const observer = new MutationObserver(() => { moveElement(); });
+  const observer = new MutationObserver(() => { if(!isSubmitting) moveElement(); });
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
-function fetchCustomerPoints() {
+async function fetchCustomerPoints() {
   const wrapper = document.getElementById('injected-loyalty-app');
-  if (!wrapper || !wrapper.querySelector('#proxy-app-container')) return;
+  if (!wrapper || isSubmitting) return;
 
-  const pointsDisplay = wrapper.querySelector('#points_balance_display');
-  const actionArea = wrapper.querySelector('#redeem_action_area');
-  const inputField = wrapper.querySelector('#user_input_value');
+  const btn = wrapper.querySelector('#btn_submit_redeem');
+  const input = wrapper.querySelector('#user_input_value');
+  const responseDiv = wrapper.querySelector('#api_response_message');
+  const couponArea = wrapper.querySelector('#coupon_tag_area');
+  const couponText = wrapper.querySelector('#active_coupon_text');
   const customerId = wrapper.querySelector('#proxy-app-container').getAttribute('data-customer-id');
 
-  if (!customerId) return;
+  try {
+    const cartRes = await fetch('/cart.js');
+    const cart = await cartRes.json();
+    
+    // Check if any discount is actually applied in the cart
+    const hasDiscountInCart = cart.cart_level_discount_applications && cart.cart_level_discount_applications.length > 0;
+    const attributeReward = cart.attributes ? cart.attributes['active_reward_code'] : null;
 
-  fetch(`/apps/public?customerId=${customerId}`)
-  .then(res => res.json())
-  .then(data => {
-    if (data.success && data.pointvalue > 0) {
-      pointsDisplay.innerText = data.pointvalue;
-      inputField.setAttribute('data-max-points', data.pointvalue);
-      inputField.value = data.pointvalue; 
-      actionArea.style.display = "block";
-    } else {
-      pointsDisplay.innerText = "0";
-      actionArea.style.display = "none";
+    const res = await fetch(`/apps/public?customerId=${customerId}`);
+    const data = await res.json();
+
+    if (data.success) {
+      wrapper.querySelector('#points_balance_display').innerText = data.pointvalue;
+      input.setAttribute('data-max-points', data.pointvalue);
+
+      // Condition: Show disabled only if attribute exists AND cart has discount
+      if (attributeReward && hasDiscountInCart) {
+        setUIState(wrapper, true, attributeReward);
+      } else {
+        // If discount was deleted from checkout/cart, re-enable everything
+        setUIState(wrapper, false, "");
+        if(attributeReward && !hasDiscountInCart) {
+           // Clean up the stale attribute
+           await fetch('/cart/update.js', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ attributes: { 'active_reward_code': null } })
+           });
+        }
+      }
     }
-  })
-  .catch(() => {
-    pointsDisplay.innerText = "Error";
-  });
+  } catch (err) { console.error("Sync error:", err); }
+}
+
+function setUIState(wrapper, isDisabled, couponCode) {
+  const btn = wrapper.querySelector('#btn_submit_redeem');
+  const input = wrapper.querySelector('#user_input_value');
+  const responseDiv = wrapper.querySelector('#api_response_message');
+  const couponArea = wrapper.querySelector('#coupon_tag_area');
+  const couponText = wrapper.querySelector('#active_coupon_text');
+
+  if (isDisabled) {
+    btn.disabled = true;
+    btn.style.opacity = "0.5";
+    btn.style.cursor = "not-allowed";
+    input.disabled = true;
+    input.style.backgroundColor = "#f5f5f5";
+    responseDiv.innerHTML = `<span style="color: #27ae60; font-weight:600;">✔ Discount Applied.</span>`;
+    couponArea.style.display = "block";
+    couponText.innerText = couponCode;
+  } else {
+    btn.disabled = false;
+    btn.style.opacity = "1";
+    btn.style.cursor = "pointer";
+    input.disabled = false;
+    input.style.backgroundColor = "#ffffff";
+    responseDiv.innerHTML = "";
+    couponArea.style.display = "none";
+  }
 }
 
 function setupInputValidation() {
@@ -129,77 +170,74 @@ function setupInputValidation() {
   const errorDiv = wrapper.querySelector('#input_validation_error');
 
   inputField.addEventListener('input', function() {
-    const currentValue = parseInt(this.value) || 0;
-    const maxPoints = parseInt(this.getAttribute('data-max-points') || 0);
-
-    if (currentValue > maxPoints) {
+    const max = parseInt(this.getAttribute('data-max-points') || 0);
+    const current = parseInt(this.value) || 0;
+    if (current > max) {
+      errorDiv.innerText = "Insufficient balance!";
+      errorDiv.style.display = "block";
       submitBtn.disabled = true;
-      submitBtn.style.opacity = "0.5";
-      errorDiv.innerText = `Insufficient balance (Max: ${maxPoints})`;
-      errorDiv.style.display = 'block';
     } else {
+      errorDiv.style.display = "none";
       submitBtn.disabled = false;
-      submitBtn.style.opacity = "1";
-      errorDiv.style.display = 'none';
     }
   });
 }
 
-function submitCustomerData() {
+async function submitCustomerData() {
   const wrapper = document.getElementById('injected-loyalty-app');
   const inputField = wrapper.querySelector('#user_input_value');
-  const responseDiv = wrapper.querySelector('#api_response_message');
   const loadingDiv = wrapper.querySelector('#api_loading');
   const customerId = wrapper.querySelector('#proxy-app-container').getAttribute('data-customer-id');
 
-  if (!inputField.value || inputField.value <= 0) {
-    alert("Please enter a valid amount of points.");
-    return;
-  }
+  if (!inputField.value || inputField.value <= 0) return;
 
+  isSubmitting = true;
   loadingDiv.style.display = 'block';
-  responseDiv.innerText = '';
 
-  fetch('/apps/public', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ customerId: customerId, userValue: inputField.value })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if(data.success) {
+  try {
+    const res = await fetch('/apps/public', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerId: customerId, userValue: inputField.value })
+    });
+    const data = await res.json();
+
+    if (data.success) {
       const couponCode = data.discountTitle;
-      localStorage.setItem('active_reward', JSON.stringify({ code: couponCode, owner: customerId }));
 
-      fetch(`/discount/${couponCode}`).then(() => {
-        fetch(window.location.href)
-          .then(response => response.text())
-          .then(html => {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const selectors = ['.drawer__inner', '.cart-drawer__footer', '#CartDrawer-Form', '.totals'];
-            
-            selectors.forEach(selector => {
-              const newEl = doc.querySelector(selector);
-              const oldEl = document.querySelector(selector);
-              if (newEl && oldEl) oldEl.innerHTML = newEl.innerHTML;
-            });
-            
-            loadingDiv.style.display = 'none';
-            responseDiv.innerHTML = `<span style="color: #27ae60;">✔ Coupon <b>${couponCode}</b> applied!</span>`;
-            fetchCustomerPoints();
-          });
+      await fetch('/cart/update.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attributes: { 'active_reward_code': couponCode } })
       });
-    } else {
+
+      await fetch(`/discount/${couponCode}`);
+
       loadingDiv.style.display = 'none';
-      responseDiv.innerHTML = `<span style="color: #e74c3c;">${data.message || 'Error redeeming points'}</span>`;
+      setUIState(wrapper, true, couponCode);
+
+      setTimeout(() => {
+          isSubmitting = false;
+          fetchCustomerPoints();
+      }, 2000);
+
+    } else {
+      isSubmitting = false;
+      loadingDiv.style.display = 'none';
+      alert(data.message || "Error redeeming points");
     }
-  })
-  .catch(() => {
+  } catch (err) {
+    isSubmitting = false;
     loadingDiv.style.display = 'none';
-    responseDiv.innerText = "Connection error.";
-  });
+  }
 }
+
+// Watch for cart drawer openings to refresh state
+document.addEventListener('click', function(e) {
+  if (e.target.closest('.header__icon--cart') || e.target.closest('#cart-icon-bubble') || e.target.closest('.cart-link')) {
+    setTimeout(fetchCustomerPoints, 500);
+  }
+});
 </script>
 
 {% schema %}
