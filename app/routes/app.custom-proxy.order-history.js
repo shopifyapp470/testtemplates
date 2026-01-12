@@ -33,13 +33,31 @@ export const loader = async ({ request }) => {
 
   if (!rewardData) {
     // Agar customer ka record nahi hai to 0 points bhejenge
-    return data({ orders: [], totalPoints: 0, birthdayPoint: 0, 
+    return data({ orders: [], totalPoints: 0,  currentBalance: 0, 
+      lifetimeSavings: 0, birthdayPoint: 0, 
       anniversaryPoint: 0, pendingPoints: 0 });
   }
+
+    // --- CALCULATIONS LOGIC ---
+ 
+  // 1. Lifetime Savings: Total points jo shuru se ab tak earn huye hain
+  // Hum un points ko jodenge jo orders se mile hain (Cancelled orders ko exclude karke)
+  const lifetimeSavings = rewardData.orders.reduce((sum, order) => {
+    if (order.status === 'CANCELLED') return sum;
+    // pointsEarned + highRewardPoint (jo scheme mein humne calculate kiye hain)
+    return sum + (Number(order.pointsEarned) || 0) + (Number(order.highRewardPoint) || 0);
+  }, 0);
+ 
+  // 2. Current Balance: Jo points abhi customer ke paas kharch karne ke liye bache hain
+  // Aapke schema mein 'activepoint' current balance ko represent karta hai
+  const currentBalance = rewardData.activepoint || 0;
+ 
 
   // Yahan hum Database se 'pointvalue' bhej rahe hain
   return data({
     orders: rewardData.orders,
+     currentBalance: currentBalance,    // Yeh Dashboard ke pehle box ke liye hai
+    lifetimeSavings: lifetimeSavings,  // Yeh Dashboard ke doosre box ke liye hai
     totalPoints: rewardData.pointvalue, // ✅ Ye aapka current balance hai
     birthdayPoint: rewardData.birthdayPoint || 0, // Prisma model se birthdayPoint
     anniversaryPoint: rewardData.anniversaryPoint || 0, // Prisma model se anniversaryPoint
