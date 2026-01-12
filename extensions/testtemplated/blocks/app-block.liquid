@@ -94,8 +94,8 @@
           // API se milne wale orders ko store karein
           allOrders = result.orders || [];
           
-          document.getElementById('summary-total-balance').innerText = result.currentBalance || 0;
-          document.getElementById('summary-lifetime-savings').innerText = result.lifetimeSavings || 0; 
+          document.getElementById('summary-total-balance').innerText = result.totalPoints || 0;
+          document.getElementById('summary-lifetime-savings').innerText = result.totalPoints || 0; 
           document.getElementById('header-bday-points').innerText = result.birthdayPoint || 0;
           document.getElementById('header-anniv-points').innerText = result.anniversaryPoint || 0;
 

@@ -37,15 +37,16 @@ export const loader = async ({ request }) => {
       anniversaryPoint: 0, pendingPoints: 0 });
   }
 
-  const lifetimeSavings = rewardData.orders.reduce((sum, order) => {   if (order.status === 'CANCELLED') return sum;   return sum + (Number(order.pointsEarned) || 0) + (Number(order.highRewardPoint) || 0); }, 0);
-  console.log(`DEBUG [${shop}]: Customer ${customerId}`);console.log(`-> Active Balance: ${currentBalance}`);console.log(`-> Lifetime Total: ${lifetimeSavings}`);
-  const currentBalance = rewardData.activepoint || 0;
+
+
+
+  
   // Yahan hum Database se 'pointvalue' bhej rahe hain
   return data({
     orders: rewardData.orders,
     totalPoints: rewardData.pointvalue, // ✅ Ye aapka current balance hai
-    currentBalance: currentBalance, // ✅ Ye aapka current balance hai
     lifetimeSavings: lifetimeSavings, // ✅ Ye aapka lifetime savings hai
+    currentBalance: currentBalance, // ✅ Ye aapka current balance hai
     birthdayPoint: rewardData.birthdayPoint || 0, // Prisma model se birthdayPoint
     anniversaryPoint: rewardData.anniversaryPoint || 0, // Prisma model se anniversaryPoint
     pendingPoints: rewardData.pendingpoint || 0, 
