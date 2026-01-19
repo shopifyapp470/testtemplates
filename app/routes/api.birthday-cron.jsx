@@ -1,124 +1,213 @@
-import { data } from "react-router"; 
+import { useState, useEffect } from "react";
+// ✅ React Router v7 Imports
+import { Form, useLoaderData, useActionData, useNavigation, data } from "react-router";
+
+import { Page, Layout, Card, FormLayout, TextField, Button, Banner, Text, AppProvider,BlockStack } from "@shopify/polaris";
+import enTranslations from "@shopify/polaris/locales/en.json";
+import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { updateCleverTapWallet, sendCleverTapEvent } from "../utils/clevertap.server";
 
+// ==========================================
+// 1. LOADER (Fetch Values from DB)
+// ==========================================
 export const loader = async ({ request }) => {
-  console.log("\n🎁 [DAILY CRON START] Checking Birthdays & Anniversaries....");
+  const { session } = await authenticate.admin(request);
+  const settings = await db.userbirthday.findUnique({
+    where: { shop: session.shop },
+  });
+
+  return { 
+    birthdayPoint: settings?.birthdayPoint || 0,
+    anniversaryPoint: settings?.anniversaryPoint || 0,
+    earnPercentage: settings?.earnPercentage || 10,
+    allearnPercentage: settings?.allearnPercentage || 10,
+    redeemPercentage: settings?.redeemPercentage || 10, // New Field
+    minOrderTotal: settings?.minOrderTotal || 10000,
+    fixedRewardPoint: settings?.fixedRewardPoint || 100
+  };
+};
+// ==========================================
+// 2. ACTION (Save Values to DB)
+// ==========================================
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  
+  const updateData = {
+    birthdayPoint: parseInt(formData.get("birthdayPoint") || "0"),
+    anniversaryPoint: parseInt(formData.get("anniversaryPoint") || "0"),
+    earnPercentage: parseInt(formData.get("earnPercentage") || "0"),
+    allearnPercentage: parseInt(formData.get("allearnPercentage") || "0"),
+    redeemPercentage: parseInt(formData.get("redeemPercentage") || "0"),
+    minOrderTotal: parseFloat(formData.get("minOrderTotal") || "0"),
+    fixedRewardPoint: parseInt(formData.get("fixedRewardPoint") || "0"),
+  };
+
   try {
-    //const today = new Date();
-    const today = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
-    const currentMonth = today.getMonth() + 1; 
-    const currentDay = today.getDate();        
-    const currentYear = today.getFullYear();   
-    console.log(`📅 Date: ${currentDay}/${currentMonth}/${currentYear}`);
-    const allUsers = await db.rewardpoint.findMany({
-      where: {
-        OR: [
-          { dob: { not: null } },
-          { anniversaryDate: { not: null } }
-        ]
-      }
+    await db.userbirthday.upsert({
+      where: { shop: session.shop },
+      update: updateData,
+      create: { shop: session.shop, ...updateData },
     });
-
-    if (allUsers.length === 0) {
-      console.log("ℹ️ No users found with Birthday/Anniversary dates.");
-      return data({ status: "No users with dates found" });
-    }
-    let processedCount = 0;
-    for (const user of allUsers) {
-      const shop = user.store;
-      const identity = user.customeremail || user.customerid;
-      const settings = await db.userbirthday.findUnique({ where: { shop: shop } });
-      const settingBPoints = settings?.birthdayPoint || 0;
-      const settingAPoints = settings?.anniversaryPoint || 0; 
-
-      let totalPointsToAdd = 0;
-      let dbUpdateData = {}; 
-      let rewardMessages = []; 
-      // --- CHECK 1: BIRTHDAY ---
-      if (user.dob && settingBPoints > 0) {
-        const dob = new Date(user.dob);
-        const isBirthday = dob.getMonth() + 1 === currentMonth && dob.getDate() === currentDay;
-        const notRewardedYet = user.lastBirthdayRewardYear !== currentYear;
-        if (isBirthday && notRewardedYet) {
-            console.log(`\n🎂 Birthday Found: ${identity} (Points: ${settingBPoints})`);
-            totalPointsToAdd += settingBPoints;
-            dbUpdateData.birthdayPoint = settingBPoints; 
-            dbUpdateData.lastBirthdayRewardYear = currentYear;
-            rewardMessages.push("Birthday");
-
-            try {
-                await sendCleverTapEvent(identity, "User Birthday", {
-                    "Points_Gifted": settingBPoints,
-                    "Date": today.toISOString().split('T')[0],
-                    "Message": "Happy Birthday!"
-                }, shop);
-            } catch (e) {
-                console.error(`❌ [EVENT ERROR] Birthday event failed:`, e.message);
-            }
-        }
-      }
-      // --- CHECK 2: ANNIVERSARY ---
-      if (user.anniversaryDate && settingAPoints > 0) {
-        const anniv = new Date(user.anniversaryDate);
-        const isAnniversary = anniv.getMonth() + 1 === currentMonth && anniv.getDate() === currentDay;
-        const notRewardedYet = user.lastAnniversaryRewardYear !== currentYear;
-        if (isAnniversary && notRewardedYet) {
-            console.log(`\n💍 Anniversary Found: ${identity} (Points: ${settingAPoints})`);
-            totalPointsToAdd += settingAPoints;
-            dbUpdateData.anniversaryPoint = settingAPoints;
-            dbUpdateData.lastAnniversaryRewardYear = currentYear;
-            rewardMessages.push("Anniversary");
-            try {
-                await sendCleverTapEvent(identity, "User Anniversary", {
-                    "Points_Gifted": settingAPoints,
-                    "Date": today.toISOString().split('T')[0],
-                    "Message": "Happy Anniversary!"
-                }, shop);
-            } catch (e) {
-                console.error(`❌ [EVENT ERROR] Anniversary event failed:`, e.message);
-            }
-        }
-      }
-      // --- FINAL EXECUTION ---
-      if (totalPointsToAdd > 0) {
-          await db.rewardpoint.update({
-            where: { id: user.id },
-            data: { 
-                activepoint: { increment: totalPointsToAdd },
-                pointvalue: { increment: totalPointsToAdd },
-                ...dbUpdateData 
-            }
-          });
-          console.log(`💾 [DB SAVED] Customer: ${identity} | Added Points: ${totalPointsToAdd}`);
-          // ✅ FIX: Use "and" instead of "&" to prevent XSS Error
-          const reasonString = rewardMessages.join(" and "); 
-          const transactionId = `GIFT-${currentYear}-${currentMonth}-${currentDay}-${user.customerid}`;
-          console.log(`🚀 [CLEVERTAP] Attempting to Credit Wallet...`);
-          try {
-             const ctResponse = await updateCleverTapWallet(
-                identity,
-                totalPointsToAdd,
-                "CREDIT",
-                transactionId,
-                0, 
-                `Reward for ${reasonString}`, // Description
-                shop,
-                "ACTIVE"
-             );
-             console.log(`✅ [CLEVERTAP SUCCESS] Wallet updated for ${identity}`);
-             console.log(`   Response:`, JSON.stringify(ctResponse));
-          } catch (ctError) {
-             console.error(`❌ [CLEVERTAP FAILED] Could not update wallet for ${identity}`);
-             console.error(`   Error Message:`, ctError.message);
-          }
-          processedCount++;
-      }
-    }
-    console.log(`\n🏁 [CRON FINISHED] Processed ${processedCount} users.`);
-    return data({ status: "Success", processed_users: processedCount });
+    return data({ status: "success" });
   } catch (error) {
-    console.error("\n❌ [CRON FATAL ERROR]", error);
-    return data({ status: "Error", message: error.message }, { status: 500 });
+    console.error("❌ [DB SAVE ERROR]", error);
+    return data({ status: "error", message: error.message });
   }
 };
+
+// ==========================================
+// 3. UI COMPONENT
+// ==========================================
+export default function BirthdayPage() {
+  const loaderData = useLoaderData();
+  const actionData = useActionData();
+  const nav = useNavigation();
+  // --- States ---
+  const [bPoints, setBPoints] = useState(loaderData.birthdayPoint);
+  const [aPoints, setAPoints] = useState(loaderData.anniversaryPoint);
+  const [earnPct, setEarnPct] = useState(loaderData.earnPercentage);
+  const [allearnPct, setAllearnPct] = useState(loaderData.allearnPercentage);
+  const [redeemPct, setRedeemPct] = useState(loaderData.redeemPercentage);
+  const [minOrder, setMinOrder] = useState(loaderData.minOrderTotal);
+  const [fPoints, setFPoints] = useState(loaderData.fixedRewardPoint);
+
+  // Sync with Loader Data (Refresh UI when data changes)
+  useEffect(() => {
+    if (loaderData) {
+      setBPoints(loaderData.birthdayPoint);
+      setAPoints(loaderData.anniversaryPoint);
+      setEarnPct(loaderData.earnPercentage);
+      setAllearnPct(loaderData.allearnPercentage);
+      setRedeemPct(loaderData.redeemPercentage);
+      setMinOrder(loaderData.minOrderTotal);
+      setFPoints(loaderData.fixedRewardPoint);
+    }
+  }, [loaderData]);
+
+  const isSaving = nav.state === "submitting";
+
+  return (
+    <AppProvider i18n={enTranslations}>
+      <Page title="Reward Strategy Settings">
+        <Layout>
+          <Layout.Section>
+            {/* Success Banner */}
+            {actionData?.status === "success" && (
+              <div style={{ marginBottom: "20px" }}>
+                <Banner title="Settings Saved" tone="success" onDismiss={() => {}}>
+                  <p>All reward points, thresholds, and strategy settings have been updated successfully.</p>
+                </Banner>
+              </div>
+            )}
+            {/* Error Banner */}
+            {actionData?.status === "error" && (
+              <div style={{ marginBottom: "20px" }}>
+                <Banner title="Save Failed" tone="critical">
+                  <p>{actionData.message}</p>
+                </Banner>
+              </div>
+            )}
+            <Card>
+              <Form method="post">
+                <FormLayout>    
+                  {/* --- SECTION 1: EVENT REWARDS --- */}
+                  <Text variant="headingMd" as="h2">Special Event Rewards</Text>
+                  <BlockStack gap="400">
+                    <TextField
+                      label="Birthday Points"
+                      type="number"
+                      name="birthdayPoint"
+                      value={String(bPoints)}
+                      onChange={(v) => setBPoints(v)}
+                      autoComplete="off"
+                      helpText="Points awarded on customer's birthday"
+                    />
+                    <TextField
+                      label="Anniversary Points"
+                      type="number"
+                      name="anniversaryPoint"
+                      value={String(aPoints)}
+                      onChange={(v) => setAPoints(v)}
+                      autoComplete="off"
+                      helpText="Points awarded on account anniversary"
+                    />
+                  </BlockStack>
+                  {/* --- SECTION 2: HIGH VALUE ORDERS --- */}
+                  <div style={{ marginTop: '20px' }}>
+                    <Text variant="headingMd" as="h2">High Value Order Rewards</Text>
+                  </div>
+                  <BlockStack gap="400">
+                    <TextField
+                      label="Minimum Order Total (Threshold)"
+                      type="number"
+                      name="minOrderTotal"
+                      value={String(minOrder)}
+                      onChange={(v) => setMinOrder(v)}
+                      prefix="₹"
+                      helpText="Reward trigger threshold (e.g. 10000)"
+                      autoComplete="off"
+                    />
+                    <TextField
+                      label="Fixed Reward Points"
+                      type="number"
+                      name="fixedRewardPoint"
+                      value={String(fPoints)}
+                      onChange={(v) => setFPoints(v)}
+                      helpText="Extra points awarded if order is above threshold"
+                      autoComplete="off"
+                    />
+                  </BlockStack>
+                  {/* --- SECTION 3: GENERAL EARNING --- */}
+                  <div style={{ marginTop: '20px' }}>
+                    <Text variant="headingMd" as="h2">Earning Strategy</Text>
+                  </div>
+                  <BlockStack gap="400">
+                    <TextField
+                      label="Earning Percentage for First Order (%)"
+                      type="number"
+                      name="earnPercentage"
+                      value={String(earnPct)}
+                      onChange={(v) => setEarnPct(v)}
+                      suffix="%"
+                      helpText="Points calculation for the very first order."
+                      autoComplete="off"
+                    />
+                    {/* <TextField
+                      label="Earning Percentage for Subsequent/Redeem Orders (%)"
+                      type="number"
+                      name="redeemPercentage"
+                      value={String(redeemPct)}
+                      onChange={(v) => setRedeemPct(v)}
+                      suffix="%"
+                      helpText="Points calculation for orders where points might be used or regular orders."
+                      autoComplete="off"
+                    /> */}
+                  </BlockStack>
+                   <BlockStack gap="400">
+                    <TextField
+                      label="Earning Percentage for all Order (%)"
+                      type="number"
+                      name="allearnPercentage"
+                      value={String(allearnPct)}
+                      onChange={(v) => setAllearnPct(v)}
+                      suffix="%"
+                      helpText="Points calculation for the very all order."
+                      autoComplete="off"
+                    />
+                  </BlockStack>
+                  {/* --- SAVE BUTTON --- */}
+                  <div style={{ marginTop: '24px' }}>
+                    <Button submit variant="primary" loading={isSaving}>
+                      Save All Settings
+                    </Button>
+                  </div>
+                </FormLayout>
+              </Form>
+            </Card>
+          </Layout.Section>
+        </Layout>
+      </Page>
+    </AppProvider>
+  );
+}

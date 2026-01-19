@@ -16,7 +16,30 @@
           <img src="{{ 'hero.png' | asset_url }}" alt="heroIllustration" height="285" width="412" loading="lazy">{% endif %}
       </div>
     </div>
+<script>
+  function copyReferral() {
+    const rawId = "{{ customer.id }}".split('/').pop();
+    const hex = btoa(rawId);
+    const senderEmail = "{{ customer.email }}";
+    const shopDomain = "{{ shop.permanent_domain }}";
+    
+    // Aapki Render Application URL
+    const appBaseUrl = "https://shopify-rewards-app.onrender.com"; 
+    
+    // Link format: External API call
+    const url = `${appBaseUrl}/api/referral?ref=${hex}&se=${btoa(senderEmail)}&shop=${shopDomain}`;
+    
+    navigator.clipboard.writeText(url).then(() => {
+        alert("Referral link copied!");
+    });
+  }
+</script>
 
+<div style="text-align: center; margin-top: 20px;">
+  <button type="button" class="button" onclick="copyReferral()" style="background-color: #5c6ac4; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+    Copy My Referral Link
+  </button>
+</div>
     <div class="reward-summary-grid">
       <div class="summary-card">
         <div class="summary-info"><span>Total Reward Points Balance</span><strong id="summary-total-balance">0</strong></div>
@@ -40,15 +63,14 @@
         <div class="header-points-summary">
           <div class="special-point-box"><span class="label">Birthday</span><span class="val" id="header-bday-points">0</span></div>
           <div class="special-point-box"><span class="label">Anniversary</span><span class="val" id="header-anniv-points">0</span></div>
-          <div class="special-point-box"><span class="label">High Order</span><span class="val" id="header-high-order-points">0</span></div>
         </div>
       </div>
       
       <div class="tab-menu">
-        <div class="tab-item active" onclick="filterData('all', this)">All Activity</div>
-        <div class="tab-item" onclick="filterData('earned', this)">Earned</div>
-        <div class="tab-item" onclick="filterData('redeemed', this)">Redeemed</div>
-        <div class="tab-item" onclick="filterData('cancelled', this)">Cancelled</div> 
+        <div class="tab-item active" data-type="all" onclick="filterData('all', this)">All Activity</div>
+        <div class="tab-item" data-type="earned" onclick="filterData('earned', this)">Earned</div>
+        <div class="tab-item" data-type="redeemed" onclick="filterData('redeemed', this)">Redeemed</div>
+        <div class="tab-item" data-type="cancelled" onclick="filterData('cancelled', this)">Cancelled</div> 
       </div>
 
       <div id="activity-list">
@@ -83,6 +105,7 @@
 
 <script>
   let allOrders = [];
+  let currentFilter = 'all';
 
   document.addEventListener("DOMContentLoaded", async function() {
     {% if customer %}
@@ -91,7 +114,6 @@
         const response = await fetch(proxyUrl);
         if (response.ok) {
           const result = await response.json();
-          // API se milne wale orders ko store karein
           allOrders = result.orders || [];
           
           document.getElementById('summary-total-balance').innerText = result.totalPoints || 0;
@@ -99,24 +121,7 @@
           document.getElementById('header-bday-points').innerText = result.birthdayPoint || 0;
           document.getElementById('header-anniv-points').innerText = result.anniversaryPoint || 0;
 
-          // ==========================================
-          // LOGIC: FIRST ORDER HIGH REWARD ONLY
-          // ==========================================
-          let firstHighOrderPoints = 0;
-          
-          if (allOrders.length > 0) {
-            // Shopify API response descending hota hai (nayan order pehle).
-            // Isliye array ka last element hamesha customer ka "sabse pehla order" hota hai.
-            const oldestOrder = allOrders[allOrders.length - 1]; 
-            
-            if (oldestOrder && oldestOrder.status !== 'CANCELLED') {
-              firstHighOrderPoints = Number(oldestOrder.highRewardPoint) || 0;
-            }
-          }
-          
-          document.getElementById('header-high-order-points').innerText = firstHighOrderPoints;
-
-          renderList(allOrders);
+          renderList(allOrders, 'all');
         }
       } catch (e) { 
         console.error("Reward fetch error:", e); 
@@ -125,39 +130,50 @@
     {% endif %}
   });
 
-  function renderList(orders) {
+  function renderList(orders, filterType) {
     const container = document.getElementById('activity-list');
+    let htmlContent = '';
+
     if (!orders || orders.length === 0) { 
-      container.innerHTML = `<div style="padding:40px; text-align:center;">No records found.</div>`; 
+      container.innerHTML = `<div style="padding:40px; text-align:center;">No records found for ${filterType}.</div>`; 
       return; 
     }
-    
-    container.innerHTML = orders.map(order => {
-      let rows = '';
-      // Earned Points (Isme High Order aur Percentage dono included hain)
-      if (Number(order.pointsEarned) > 0) {
-        let orderTitle = order.orderNumber ? 'Order ' + order.orderNumber : 'Order';
-        rows += createActivityRow(orderTitle, order.createdAt, order.pointsEarned, 'earned');
+
+    orders.forEach(order => {
+      // 1. Logic for Earned Rows
+      if ((filterType === 'all' || filterType === 'earned') && Number(order.pointsEarned) > 0) {
+        let orderTitle = order.orderNumber ? 'Order ' + order.orderNumber : 'Order Earning';
+        htmlContent += createActivityRow(orderTitle, order.createdAt, order.pointsEarned, 'earned');
       }
-      // Redeemed Points
-      if (Number(order.pointsRedeemed) > 0 && order.status !== 'CANCELLED') {
-        rows += createActivityRow('Checkout Redemption', order.createdAt, order.pointsRedeemed, 'redeemed');
+
+      // 2. Logic for Redeemed Rows
+      if ((filterType === 'all' || filterType === 'redeemed') && Number(order.pointsRedeemed) > 0 && order.status !== 'CANCELLED') {
+        htmlContent += createActivityRow('Checkout Redemption', order.createdAt, order.pointsRedeemed, 'redeemed');
       }
-      // Reverted Logic for Cancelled
-      if (order.status === 'CANCELLED' && Number(order.pointsRevert) > 0) {
-        rows += createActivityRow('Cancelled Order ' + (order.orderNumber || ''), order.createdAt, order.pointsRevert, 'cancelled');
+
+      // 3. Logic for Cancelled Rows
+      if ((filterType === 'all' || filterType === 'cancelled') && order.status === 'CANCELLED' && Number(order.pointsRevert) > 0) {
+        htmlContent += createActivityRow('Cancelled Order ' + (order.orderNumber || ''), order.createdAt, order.pointsRevert, 'cancelled');
       }
-      return rows;
-    }).join('');
+    });
+
+    if (htmlContent === '') {
+        container.innerHTML = `<div style="padding:40px; text-align:center;">No ${filterType} points found.</div>`;
+    } else {
+        container.innerHTML = htmlContent;
+    }
   }
 
   function createActivityRow(title, dateStr, points, type) {
     const date = new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
     
-    let badgeClass = 'badge-earned';
-    let badgeText = 'Earned Points';
+    let badgeClass = '';
+    let badgeText = '';
     
-    if(type === 'redeemed') {
+    if (type === 'earned') {
+      badgeClass = 'badge-earned';
+      badgeText = 'Earned Points';
+    } else if(type === 'redeemed') {
       badgeClass = 'badge-used';
       badgeText = 'Used Points';
     } else if (type === 'cancelled') {
@@ -186,19 +202,10 @@
   function filterData(type, el) {
     document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    const listContainer = document.getElementById('activity-list');
-    listContainer.scrollTop = 0;
+    currentFilter = type;
     
-    let filtered = allOrders;
-    if (type === 'earned') {
-      filtered = allOrders.filter(o => Number(o.pointsEarned) > 0);
-    } else if (type === 'redeemed') {
-      filtered = allOrders.filter(o => Number(o.pointsRedeemed) > 0 && o.status !== 'CANCELLED');
-    } else if (type === 'cancelled') {
-      filtered = allOrders.filter(o => o.status === 'CANCELLED' && Number(o.pointsRevert) > 0);
-    }
-    
-    renderList(filtered);
+    // Yahan hum allOrders bhej rahe hain, renderList apne aap internal logic se filter karegi
+    renderList(allOrders, type);
   }
 </script>
 
@@ -223,7 +230,6 @@
     { "type": "text", "id": "policy_1", "label": "Policy Line 1", "default": "Maximum points value cannot exceed order value" },
     { "type": "text", "id": "policy_2", "label": "Policy Line 2", "default": "Reward Points never expire" },
     { "type": "text", "id": "policy_3", "label": "Policy Line 3", "default": "Non-transferable between accounts" }
-   
   ]
 }
 {% endschema %}

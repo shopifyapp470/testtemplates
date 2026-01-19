@@ -49,6 +49,8 @@ model Rewardpoint {
   lastAnniversaryRewardYear Int?
   birthdayPoint             Int      @default(0) 
   anniversaryPoint          Int      @default(0)
+  referredBy      String?  // Referrer (User A) ki Customer ID   
+  firstOrderDone  Boolean  @default(false)
   orders       OrderHistory[]
 }
 
@@ -95,4 +97,14 @@ model CleverTapConfig {
   region       String   @default("in1") 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model ReferralTracking {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  referrerId    String   // Sender's ID
+  senderEmail   String?  // <--- Nayi field: Sender ka email store karne ke liye
+  userIp        String   // Matching ke liye
+  receiverEmail String?  // Receiver ka email (Webhook se update hoga)
+  shop          String
+  createdAt     DateTime @default(now())
 }

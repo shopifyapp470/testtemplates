@@ -1,8 +1,8 @@
 {% comment %}
-  LOYALTY REDEEM DRAWER EXTENSION - UPDATED WITH COUPON TAG
-  1. Shows only Green Message "Discount Applied".
-  2. Generates the Red Box coupon tag as shown in screenshot.
-  3. No page reload on click.
+  LOYALTY REDEEM DRAWER - ADVANCED VERSION
+  - Disables UI instead of hiding after discount
+  - Auto-re-enables if discount is removed from cart/checkout
+  - Syncs state on cart changes
 {% endcomment %}
 
 <div id="loyalty-extension-wrapper" style="display: none;">
@@ -28,7 +28,7 @@
             </div>
           </div>
 
-          <div id="redeem_action_area" style="display: none;">
+          <div id="redeem_action_area">
             <div style="display: flex; gap: 10px;">
               <div style="position: relative; flex: 1;">
                 <input type="number" id="user_input_value" 
@@ -44,12 +44,12 @@
             <div id="input_validation_error" style="color: #e74c3c; font-size: 12px; margin-top: 8px; font-weight: 500; display: none;"></div>
           </div>
 
-          <div id="api_response_message" style="margin-top: 12px; font-size: 13px;"></div>
+          <div id="api_response_message" style="margin-top: 12px; font-size: 14px;"></div>
           
           <div id="coupon_tag_area" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; display: none;">
-             <div style="display: flex; align-items: center; background: #f8f9fa; padding: 8px 12px; border-radius: 4px; border: 1px solid #e9ecef;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2d3436" stroke-width="2" style="margin-right: 10px;"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
-                <span id="active_coupon_text" style="font-size: 13px; color: #2d3436; font-weight: 500; letter-spacing: 0.5px;"></span>
+             <div style="display: flex; align-items: center; background: #fee2e2; padding: 10px 12px; border-radius: 6px; border: 1.5px dashed #ef4444;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" style="margin-right: 10px;"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+                <span id="active_coupon_text" style="font-size: 14px; color: #b91c1c; font-weight: 700; letter-spacing: 1px;"></span>
              </div>
           </div>
 
@@ -63,6 +63,8 @@
 </div>
 
 <script>
+let isSubmitting = false;
+
 document.addEventListener("DOMContentLoaded", function() {
   initExtension();
 });
@@ -84,15 +86,16 @@ function initExtension() {
   };
 
   moveElement();
-  const observer = new MutationObserver(() => { moveElement(); });
+  const observer = new MutationObserver(() => { if(!isSubmitting) moveElement(); });
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
 async function fetchCustomerPoints() {
   const wrapper = document.getElementById('injected-loyalty-app');
-  if (!wrapper) return;
+  if (!wrapper || isSubmitting) return;
 
-  const actionArea = wrapper.querySelector('#redeem_action_area');
+  const btn = wrapper.querySelector('#btn_submit_redeem');
+  const input = wrapper.querySelector('#user_input_value');
   const responseDiv = wrapper.querySelector('#api_response_message');
   const couponArea = wrapper.querySelector('#coupon_tag_area');
   const couponText = wrapper.querySelector('#active_coupon_text');
@@ -102,38 +105,61 @@ async function fetchCustomerPoints() {
     const cartRes = await fetch('/cart.js');
     const cart = await cartRes.json();
     
-    const appliedDiscounts = cart.cart_level_discount_applications || [];
-    const hasActiveReward = appliedDiscounts.some(d => d.title.toUpperCase().includes('REWARD'));
+    // Check if any discount is actually applied in the cart
+    const hasDiscountInCart = cart.cart_level_discount_applications && cart.cart_level_discount_applications.length > 0;
     const attributeReward = cart.attributes ? cart.attributes['active_reward_code'] : null;
 
     const res = await fetch(`/apps/public?customerId=${customerId}`);
     const data = await res.json();
 
-    if (data.success && data.pointvalue >= 0) {
+    if (data.success) {
       wrapper.querySelector('#points_balance_display').innerText = data.pointvalue;
-      wrapper.querySelector('#user_input_value').setAttribute('data-max-points', data.pointvalue);
+      input.setAttribute('data-max-points', data.pointvalue);
 
-      if (attributeReward && hasActiveReward) {
-        actionArea.style.display = "none";
-        // ONLY GREEN MESSAGE AS PER REQUEST
-        responseDiv.innerHTML = `<span style="color: #27ae60; font-weight:600;">✔ Discount Applied.</span>`;
-        // SHOW RED BOX COUPON TAG
-        couponArea.style.display = "block";
-        couponText.innerText = attributeReward;
+      // Condition: Show disabled only if attribute exists AND cart has discount
+      if (attributeReward && hasDiscountInCart) {
+        setUIState(wrapper, true, attributeReward);
       } else {
-        if (attributeReward && !hasActiveReward) {
-            await fetch('/cart/update.js', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ attributes: { 'active_reward_code': null } })
-            });
+        // If discount was deleted from checkout/cart, re-enable everything
+        setUIState(wrapper, false, "");
+        if(attributeReward && !hasDiscountInCart) {
+           // Clean up the stale attribute
+           await fetch('/cart/update.js', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ attributes: { 'active_reward_code': null } })
+           });
         }
-        actionArea.style.display = "block";
-        responseDiv.innerHTML = "";
-        couponArea.style.display = "none";
       }
     }
   } catch (err) { console.error("Sync error:", err); }
+}
+
+function setUIState(wrapper, isDisabled, couponCode) {
+  const btn = wrapper.querySelector('#btn_submit_redeem');
+  const input = wrapper.querySelector('#user_input_value');
+  const responseDiv = wrapper.querySelector('#api_response_message');
+  const couponArea = wrapper.querySelector('#coupon_tag_area');
+  const couponText = wrapper.querySelector('#active_coupon_text');
+
+  if (isDisabled) {
+    btn.disabled = true;
+    btn.style.opacity = "0.5";
+    btn.style.cursor = "not-allowed";
+    input.disabled = true;
+    input.style.backgroundColor = "#f5f5f5";
+    responseDiv.innerHTML = `<span style="color: #27ae60; font-weight:600;">✔ Discount Applied.</span>`;
+    couponArea.style.display = "block";
+    couponText.innerText = couponCode;
+  } else {
+    btn.disabled = false;
+    btn.style.opacity = "1";
+    btn.style.cursor = "pointer";
+    input.disabled = false;
+    input.style.backgroundColor = "#ffffff";
+    responseDiv.innerHTML = "";
+    couponArea.style.display = "none";
+  }
 }
 
 function setupInputValidation() {
@@ -146,21 +172,13 @@ function setupInputValidation() {
   inputField.addEventListener('input', function() {
     const max = parseInt(this.getAttribute('data-max-points') || 0);
     const current = parseInt(this.value) || 0;
-
     if (current > max) {
       errorDiv.innerText = "Insufficient balance!";
       errorDiv.style.display = "block";
       submitBtn.disabled = true;
-      submitBtn.style.opacity = "0.5";
-    } else if (current <= 0 && this.value !== "") {
-      errorDiv.innerText = "Please enter a valid amount.";
-      errorDiv.style.display = "block";
-      submitBtn.disabled = true;
-      submitBtn.style.opacity = "0.5";
     } else {
       errorDiv.style.display = "none";
       submitBtn.disabled = false;
-      submitBtn.style.opacity = "1";
     }
   });
 }
@@ -168,17 +186,13 @@ function setupInputValidation() {
 async function submitCustomerData() {
   const wrapper = document.getElementById('injected-loyalty-app');
   const inputField = wrapper.querySelector('#user_input_value');
-  const responseDiv = wrapper.querySelector('#api_response_message');
   const loadingDiv = wrapper.querySelector('#api_loading');
-  const couponArea = wrapper.querySelector('#coupon_tag_area');
-  const couponText = wrapper.querySelector('#active_coupon_text');
-  const actionArea = wrapper.querySelector('#redeem_action_area');
   const customerId = wrapper.querySelector('#proxy-app-container').getAttribute('data-customer-id');
 
   if (!inputField.value || inputField.value <= 0) return;
 
+  isSubmitting = true;
   loadingDiv.style.display = 'block';
-  responseDiv.innerText = '';
 
   try {
     const res = await fetch('/apps/public', {
@@ -200,25 +214,27 @@ async function submitCustomerData() {
       await fetch(`/discount/${couponCode}`);
 
       loadingDiv.style.display = 'none';
-      actionArea.style.display = "none";
-      responseDiv.innerHTML = `<span style="color: #27ae60; font-weight:600;">✔ Discount Applied.</span>`;
-      
-      // DISPLAY RED BOX TAG
-      couponArea.style.display = "block";
-      couponText.innerText = couponCode;
-      
-      setTimeout(fetchCustomerPoints, 1000);
+      setUIState(wrapper, true, couponCode);
+
+      setTimeout(() => {
+          isSubmitting = false;
+          fetchCustomerPoints();
+      }, 2000);
+
     } else {
+      isSubmitting = false;
       loadingDiv.style.display = 'none';
-      responseDiv.innerHTML = `<span style="color: #e74c3c;">${data.message || 'Error'}</span>`;
+      alert(data.message || "Error redeeming points");
     }
   } catch (err) {
+    isSubmitting = false;
     loadingDiv.style.display = 'none';
   }
 }
 
+// Watch for cart drawer openings to refresh state
 document.addEventListener('click', function(e) {
-  if (e.target.closest('.header__icon--cart') || e.target.closest('#cart-icon-bubble')) {
+  if (e.target.closest('.header__icon--cart') || e.target.closest('#cart-icon-bubble') || e.target.closest('.cart-link')) {
     setTimeout(fetchCustomerPoints, 500);
   }
 });
