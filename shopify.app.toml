@@ -12,9 +12,6 @@ automatically_update_urls_on_dev = true
 api_version = "2026-04"
 
 
- [[webhooks.subscriptions]]
-  topics = [ "customers/update" ]
-  uri = "/webhooks/customers/update"
 
   
   [[webhooks.subscriptions]]
