@@ -12,18 +12,19 @@ export const loader = async ({ request }) => {
  
   // --- A. REFERRAL TRACKING LOGIC ---
   if (referrerId && shop) {
-    //const userIp = request.headers.get("x-forwarded-for") || "unknown";
+    const userIp = request.headers.get("x-forwarded-for") || "unknown";
  
     try {
       // Database mein tracking entry (Bridge) create karein
       await db.referralTracking.create({
         data: {
           referrerId: String(referrerId),
+          userIp: userIp,
           shop: shop,
           createdAt: new Date()
         }
       });
-      console.log(`✅ [REFERRAL] Captured: Referrer=${referrerId}`);
+      console.log(`✅ [REFERRAL] Captured: Referrer=${referrerId} | IP=${userIp}`);
       
       // User ko store ke home page par bhej dein
       return redirect(`https://${shop}`);
