@@ -16,30 +16,53 @@
           <img src="{{ 'hero.png' | asset_url }}" alt="heroIllustration" height="285" width="412" loading="lazy">{% endif %}
       </div>
     </div>
-<script>
-  function copyReferral() {
-    const rawId = "{{ customer.id }}".split('/').pop();
-    const hex = btoa(rawId);
-    const senderEmail = "{{ customer.email }}";
-    const shopDomain = "{{ shop.permanent_domain }}";
-    
-    // Aapki Render Application URL
-    const appBaseUrl = "https://testtemplates.onrender.com"; 
-    
-    // Link format: External API call
-    const url = `${appBaseUrl}/api/referral?ref=${hex}&se=${btoa(senderEmail)}&shop=${shopDomain}`;
-    
-    navigator.clipboard.writeText(url).then(() => {
-        alert("Referral link copied!");
-    });
-  }
-</script>
 
-<div style="text-align: center; margin-top: 20px;">
-  <button type="button" class="button" onclick="copyReferral()" style="background-color: #5c6ac4; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
-    Copy My Referral Link
-  </button>
+<div class="referral-card" style="margin-top: 20px; padding: 20px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+  <h3 style="margin-top: 0; color: #111827; font-size: 18px;">Refer a Friend & Earn</h3>
+  <p style="color: #6b7280; font-size: 14px;">Apne doston ko invite karein aur reward points payein!</p>
+  
+  <div class="referral-input-group" style="display: flex; gap: 10px; margin-top: 15px;">
+    {% capture referral_url %}{{ shop.url }}/apps/public?ref={{ customer.id }}{% endcapture %}
+    
+    <input type="text" id="referral-link-input" readonly value="{{ referral_url }}" 
+      style="flex: 1; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; background: #f9fafb; font-size: 14px; color: #374151;">
+    
+    <button onclick="copyReferralLink()" id="copy-btn" 
+      style="background: #008060; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600;">
+      Copy Link
+    </button>
+  </div>
+  <span id="copy-success-msg" style="display: none; color: #059669; font-size: 12px; margin-top: 5px;">Link copied to clipboard!</span>
 </div>
+ 
+<script>
+function copyReferralLink() {
+  const copyText = document.getElementById("referral-link-input");
+  const btn = document.getElementById("copy-btn");
+  const msg = document.getElementById("copy-success-msg");
+ 
+  // Select the text
+  copyText.select();
+  copyText.setSelectionRange(0, 99999); // For mobile devices
+ 
+  // Copy to clipboard
+  navigator.clipboard.writeText(copyText.value).then(() => {
+    // Success UI
+    btn.innerText = "Copied!";
+    btn.style.background = "#059669";
+    msg.style.display = "block";
+ 
+    // Reset button after 3 seconds
+    setTimeout(() => {
+      btn.innerText = "Copy Link";
+      btn.style.background = "#008060";
+      msg.style.display = "none";
+    }, 3000);
+  });
+}
+</script>
+ 
+
     <div class="reward-summary-grid">
       <div class="summary-card">
         <div class="summary-info"><span>Total Reward Points Balance</span><strong id="summary-total-balance">0</strong></div>
@@ -56,7 +79,6 @@
         </div>
       </div>
     </div>
-
     <div class="history-container">
       <div class="history-header">
         <h3>Reward Points History</h3>
@@ -233,3 +255,8 @@
   ]
 }
 {% endschema %}
+
+
+
+
+

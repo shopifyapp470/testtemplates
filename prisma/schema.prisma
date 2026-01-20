@@ -102,9 +102,6 @@ model CleverTapConfig {
 model ReferralTracking {
   id            String   @id @default(auto()) @map("_id") @db.ObjectId
   referrerId    String   // Sender's ID
-  senderEmail   String?  // <--- Nayi field: Sender ka email store karne ke liye
-  userIp        String   // Matching ke liye
-  receiverEmail String?  // Receiver ka email (Webhook se update hoga)
   shop          String
   createdAt     DateTime @default(now())
 }
