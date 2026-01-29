@@ -1,23 +1,30 @@
 import { data } from "react-router";
-import { db } from "../db.server.js";
+import { prisma } from "../db.server.js";
 import { authenticate } from "../shopify.server";
- 
+
+/**
+ * Shopify App Proxy – Track Employee Referral
+ * React Router v7 compatible
+ */
 export async function action({ request }) {
-  // 1. Security check: Shopify Signature Validation
-  // Ye line ensure karti hai ki request sirf Shopify store se aa rahi hai
+  // 🔐 Verify Shopify App Proxy signature
   const { session } = await authenticate.public.appProxy(request);
- 
+
   if (!session) {
-    return data({ success: false, message: "Unauthorized Request" }, { status: 401 });
+    return data(
+      { success: false, message: "Unauthorized request" },
+      { status: 401 }
+    );
   }
- 
+
   if (request.method !== "POST") {
-    return data({ success: false, message: "Method not allowed" }, { status: 405 });
+    return data(
+      { success: false, message: "Method not allowed" },
+      { status: 405 }
+    );
   }
- 
+
   try {
-    const payload = await request.json();
- 
     const {
       employeeEmail,
       customerEmail,
@@ -26,65 +33,73 @@ export async function action({ request }) {
       orderNumber,
       totalAmount,
       shop,
-    } = payload;
- 
-    // 2. Mandatory Validation
+    } = await request.json();
+
+    // ✅ Required fields validation
     if (!employeeEmail || !orderId) {
       return data(
         { success: false, message: "Missing required tracking data" },
         { status: 400 }
       );
     }
- 
-    // 3. Duplicate Prevention (Unique Order check)
-    const existingEntry = await db.employeeReferral.findUnique({
+
+    // 🔁 Prevent duplicate order tracking
+    const existing = await prisma.employeeReferral.findUnique({
       where: { orderId: String(orderId) },
-      select: { id: true }
+      select: { id: true },
     });
- 
-    if (existingEntry) {
-      return data({ 
-        success: true, 
-        message: "Order tracking already recorded", 
-        duplicate: true 
+
+    if (existing) {
+      return data({
+        success: true,
+        duplicate: true,
+        message: "Order already tracked",
       });
     }
- 
-    // 4. Save to Database
-    const record = await db.employeeReferral.create({
+
+    // 💾 Save referral entry
+    const record = await prisma.employeeReferral.create({
       data: {
         employeeEmail,
-        customerEmail: customerEmail || null,
+        customerEmail: customerEmail ?? null,
         customerId: customerId ? String(customerId) : null,
         orderId: String(orderId),
-        orderNumber: String(orderNumber),
-        totalAmount: parseFloat(totalAmount) || 0,
-        shop: session.shop || shop, // Use authenticated shop from session
-        dateAdded: new Date(),
+        orderNumber: orderNumber ? String(orderNumber) : null,
+        totalAmount: Number(totalAmount) || 0,
+        shop: session.shop || shop,
       },
     });
- 
-    return data({ 
-      success: true, 
-      id: record.id,
-      message: "Referral tracked successfully" 
-    }, { status: 201 });
- 
+
+    return data(
+      {
+        success: true,
+        id: record.id,
+        message: "Referral tracked successfully",
+      },
+      { status: 201 }
+    );
   } catch (error) {
-    console.error("Proxy Track Error:", error);
- 
-    if (error.code === 'P2002') {
-      return data({ success: false, message: "Order ID already exists" }, { status: 409 });
+    console.error("Referral Track Error:", error);
+
+    // Prisma unique constraint safeguard
+    if (error?.code === "P2002") {
+      return data(
+        { success: false, message: "Order already exists" },
+        { status: 409 }
+      );
     }
- 
+
     return data(
       { success: false, message: "Internal server error" },
       { status: 500 }
     );
   }
 }
- 
+
+/**
+ * Optional health check
+ */
 export async function loader({ request }) {
   await authenticate.public.appProxy(request);
-  return data({ message: "Proxy endpoint active" });
+  return data({ status: "Referral proxy active" });
 }
