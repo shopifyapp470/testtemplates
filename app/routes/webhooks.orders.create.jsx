@@ -29,51 +29,67 @@ export const action = async ({ request }) => {
       // --- orders/create webhook block ke andar ---
  
 // 1. Landing site (URL) se Employee Email nikalne ka logic
-const landingSite = payload.landing_site || "";
-const urlParams = new URLSearchParams(landingSite.split('?')[1]);
-let employeeEmail = urlParams.get("utm_source");
+/*** Employee Referral Webhook Fix ***/
  
-// 2. Backup: Agar landing_site mein nahi hai, toh note_attributes check karein
+// 1. Landing Site URL se email nikalne ka logic
+const landingSite = payload.landing_site || "";
+console.log(`🔍 [DEBUG] Order Landing Site: ${landingSite}`);
+ 
+let employeeEmail = null;
+ 
+// Regex search: URL mein se utm_source dhundna
+if (landingSite.includes("utm_source=")) {
+    const match = landingSite.match(/[?&]utm_source=([^&]+)/);
+    if (match && match[1]) {
+        // decodeURIComponent use karein taaki email@test.com sahi format mein mile
+        employeeEmail = decodeURIComponent(match[1]);
+        console.log(`🎯 [FOUND] Referral Email: ${employeeEmail}`);
+    }
+}
+ 
+// 2. Backup check: Agar URL mein nahi mila toh Note Attributes dekhein
 if (!employeeEmail) {
     const attributes = payload.note_attributes || [];
-    const employeeAttr = attributes.find(attr => attr.name === 'EmployeeEmail');
-    employeeEmail = employeeAttr ? employeeAttr.value : null;
+    const empAttr = attributes.find(attr => 
+        attr.name === 'EmployeeEmail' || attr.name === 'utm_source'
+    );
+    employeeEmail = empAttr ? empAttr.value : null;
 }
  
 if (employeeEmail) {
-    const customerEmailFromPayload = payload.customer?.email || payload.email;
+    const customerEmail = (payload.customer?.email || payload.email || "").toLowerCase().trim();
+    const empEmailClean = employeeEmail.toLowerCase().trim();
  
-    // Self-referral check
-    if (employeeEmail.toLowerCase() === customerEmailFromPayload?.toLowerCase()) {
-        console.log(`🚫 Skip: Self-referral detected for ${employeeEmail}`);
-        return new Response(); 
-    }
- 
-    try {
-        // Unique check (Duplicate check)
-        const existingEntry = await db.employeeReferral.findUnique({
-            where: { orderId: String(payload.id) }
-        });
- 
-        if (!existingEntry) {
-            await db.employeeReferral.create({
-                data: {
-                    orderId: String(payload.id),
-                    orderNumber: payload.name, 
-                    totalAmount: parseFloat(payload.total_price || 0), 
-                    employeeEmail: employeeEmail.trim(),
-                    customerEmail: customerEmailFromPayload || "Guest",
-                    shop: shop // Context variable
-                }
+    // Self-referral protection
+    if (empEmailClean === customerEmail) {
+        console.log(`🚫 [SKIP] Self-referral detected: ${empEmailClean}`);
+    } else {
+        try {
+            // Duplicate Entry Prevention
+            const existing = await db.employeeReferral.findUnique({
+                where: { orderId: String(payload.id) }
             });
-            console.log(`✅ Success: Referral saved for ${employeeEmail}`);
-        } else {
-            console.log(`⚠️ Duplicate: Order ${payload.name} already tracked.`);
+ 
+            if (!existing) {
+                // Database Insertion
+                await db.employeeReferral.create({
+                    data: {
+                        orderId: String(payload.id),
+                        orderNumber: payload.name,
+                        totalAmount: parseFloat(payload.total_price || 0),
+                        employeeEmail: empEmailClean,
+                        customerEmail: customerEmail || "Guest",
+                        shop: shop
+                    }
+                });
+                console.log(`✅ [DB SUCCESS] Order ${payload.name} saved for ${empEmailClean}`);
+            }
+        } catch (error) {
+            console.error("❌ [DB ERROR]:", error.message);
         }
-    } catch (error) {
-        console.error("❌ DB Error:", error.message);
     }
 } else {
+    // Agar dono jagah se nahi mila, tab ye log aayega
     console.log("ℹ️ Info: Order without utm_source referral.");
 }
  
