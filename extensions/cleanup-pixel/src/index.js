@@ -24,7 +24,7 @@ register(({ analytics, browser }) => {
  
       console.log("📤 [PIXEL] Sending data to backend:", payload);
  
-      const response = await fetch("https://shopify-rewards-app.onrender.com/app/custom-proxy/track-handler", {
+      const response = await fetch("https://testtemplates.onrender.com/app/custom-proxy/track-handler", {
         method: "POST",
         mode: "cors",
         headers: { "Content-Type": "application/json" },
