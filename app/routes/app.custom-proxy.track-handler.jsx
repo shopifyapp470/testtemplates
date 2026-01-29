@@ -1,5 +1,5 @@
 import { data } from "react-router";
-import { prisma } from "../db.server.js";
+import { db } from "../db.server.js";
 
 export async function action({ request }) {
   if (request.method !== "POST") {
@@ -25,7 +25,7 @@ export async function action({ request }) {
     }
 
     // 🔒 Prevent duplicate order entry
-    const existing = await prisma.employeeReferral.findUnique({
+    const existing = await db.employeeReferral.findUnique({
       where: { orderId },
     });
 
@@ -33,7 +33,7 @@ export async function action({ request }) {
       return data({ success: true, message: "Order already tracked" });
     }
 
-    await prisma.employeeReferral.create({
+    await db.employeeReferral.create({
       data: {
         employeeEmail,
         customerEmail: customerEmail ?? null,
