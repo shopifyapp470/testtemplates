@@ -1,46 +1,22 @@
 import { register } from "@shopify/web-pixels-extension";
  
 register(({ analytics, browser }) => {
-  analytics.subscribe('checkout_completed', async (event) => {
-    console.log("🏁 [PIXEL] Checkout Completed Event Triggered");
- 
-    try {
-      const employeeEmail = await browser.sessionStorage.getItem("referred_employee");
-      
-      if (!employeeEmail) {
-        console.warn("🚫 [PIXEL] No employee email found in session storage. Skipping.");
-        return;
-      }
- 
-      const checkout = event.data.checkout;
-      const payload = {
-        employeeEmail,
-        customerEmail: checkout.email,
-        orderId: checkout.order?.id,
-        orderNumber: checkout.order?.name,
-        totalAmount: checkout.totalPrice?.amount,
-        shop: event.context.window.location.hostname,
-      };
- 
-      console.log("📤 [PIXEL] Sending data to backend:", payload);
- 
-      const response = await fetch("https://testtemplates.onrender.com/app/custom-proxy/track-handler", {
-        method: "POST",
-        mode: "cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
- 
-      if (response.ok) {
-        const resData = await response.json();
-        console.log("🎉 [PIXEL] Backend Response Success:", resData);
-      } else {
-        console.error("❌ [PIXEL] Backend Error Status:", response.status);
-      }
- 
-    } catch (err) {
-      console.error("🚨 [PIXEL] Fetch Catch Error:", err);
+  // 1. UTM Source (Employee Email) ko capture karke Session Storage mein save karein
+  analytics.subscribe('page_viewed', async (event) => {
+    const url = new URL(event.context.document.location.href);
+    const employeeEmail = url.searchParams.get("utm_source");
+   
+    if (employeeEmail) {
+      await browser.sessionStorage.setItem("referred_employee", employeeEmail);
+      console.log("📍 [PIXEL] Employee Email saved in session:", employeeEmail);
     }
+  });
+ 
+  // 2. Checkout khatam hote hi session storage saaf karein
+  analytics.subscribe('checkout_completed', async (event) => {
+    console.log("🏁 [PIXEL] Order complete. Cleaning session storage...");
+    await browser.sessionStorage.removeItem("referred_employee");
+    console.log("✅ [PIXEL] Session cleared.");
   });
 });
  
