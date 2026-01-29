@@ -6,25 +6,32 @@ import {register} from "@shopify/web-pixels-extension";
     // Sample subscribe to page view
  
 register(({ analytics, browser }) => {
+  // 1. UTM Source (Employee Email) capture karke session storage mein save karein
   analytics.subscribe('page_viewed', async (event) => {
     const url = new URL(event.context.document.location.href);
     const employeeEmail = url.searchParams.get("utm_source");
+   
     if (employeeEmail) {
       await browser.sessionStorage.setItem("referred_employee", employeeEmail);
     }
   });
  
+  // 2. Checkout complete hone par App Proxy ko hit karein
   analytics.subscribe('checkout_completed', async (event) => {
     try {
       const employeeEmail = await browser.sessionStorage.getItem("referred_employee");
       if (!employeeEmail) return;
  
       const checkout = event.data.checkout;
-     
-      // Direct call to Render to avoid RestrictedUrlError
-      await fetch("https://testtemplates.onrender.com/app/custom-proxy/track-handle", {
+      const shopDomain = event.context.window.location.hostname;
+ 
+      // ✅ FIX: Direct Render URL ki jagah App Proxy path use karein
+      // Signature verification ke liye window params (?shop=...&signature=...) bhejna zaroori hai
+      const searchParams = event.context.window.location.search;
+      const proxyUrl = `https://${shopDomain}/apps/public/track-handler${searchParams}`;
+ 
+      await fetch(proxyUrl, {
         method: "POST",
-        mode: "cors", // Explicitly enable CORS
         headers: {
           "Content-Type": "application/json",
         },
@@ -34,16 +41,14 @@ register(({ analytics, browser }) => {
           orderId: checkout.order?.id,
           orderNumber: checkout.order?.name,
           totalAmount: checkout.totalPrice?.amount,
-          shop: event.context.window.location.hostname,
+          shop: shopDomain,
         }),
       });
  
+      // Cleanup
       await browser.sessionStorage.removeItem("referred_employee");
     } catch (err) {
-      console.error("Pixel Fetch Error:", err);
+      console.error("Pixel Tracking Error:", err);
     }
   });
 });
-//});
- 
- 

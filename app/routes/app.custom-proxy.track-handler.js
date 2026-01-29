@@ -1,18 +1,19 @@
 import { data } from "react-router";
-import  db  from "../db.server.js";
-import { authenticate } from "../shopify.server.js";
+import db from "../db.server"; // Default import (no curly braces)
+import { authenticate } from "../shopify.server";
  
-export async function action({ request }) {
-  // 1. Security check: Shopify Proxy Signature Validation
-  // Ye session tabhi milega jab request valid Shopify signature ke sath aayegi
+export const loader = async ({ request }) => {
+  // Security: Check if request is coming through Shopify Proxy
+  await authenticate.public.appProxy(request);
+  return data({ message: "Referral Proxy Active" });
+};
+ 
+export const action = async ({ request }) => {
+  // 1. Authenticate Proxy Signature
   const { session } = await authenticate.public.appProxy(request);
  
   if (!session) {
-    return data({ success: false, message: "Unauthorized: Invalid Signature" }, { status: 401 });
-  }
- 
-  if (request.method !== "POST") {
-    return data({ success: false, message: "Method not allowed" }, { status: 405 });
+    return data({ success: false, message: "Unauthorized Request" }, { status: 401 });
   }
  
   try {
@@ -20,50 +21,49 @@ export async function action({ request }) {
     const {
       employeeEmail,
       customerEmail,
-      customerId,
       orderId,
       orderNumber,
       totalAmount,
     } = payload;
  
-    // 2. Validation
     if (!employeeEmail || !orderId) {
       return data({ success: false, message: "Missing data" }, { status: 400 });
     }
  
-    // 3. Duplicate Check
-    const existing = await db.employeeReferral.findUnique({
+    // 2. Duplicate Check
+    const existingEntry = await db.employeeReferral.findUnique({
       where: { orderId: String(orderId) },
+      select: { id: true }
     });
  
-    if (existing) {
-      return data({ success: true, message: "Duplicate suppressed" });
+    if (existingEntry) {
+      return data({ success: true, message: "Already tracked", duplicate: true });
     }
  
-    // 4. Save using Session Shop (More secure than payload shop)
+    // 3. Save to Database
     await db.employeeReferral.create({
       data: {
         employeeEmail,
         customerEmail: customerEmail || null,
-        customerId: customerId ? String(customerId) : null,
         orderId: String(orderId),
         orderNumber: String(orderNumber || ""),
         totalAmount: parseFloat(totalAmount) || 0,
-        shop: session.shop, 
+        shop: session.shop, // Authenticated shop from session
         dateAdded: new Date(),
       },
     });
  
-    return data({ success: true }, { status: 201 });
+    return data({ success: true }, {
+      status: 201,
+      headers: {
+        "Access-Control-Allow-Origin": "*", // Browser CORS policy safety
+        "Content-Type": "application/json"
+      }
+    });
  
   } catch (error) {
-    console.error("Referral Error:", error);
-    return data({ success: false, message: "Internal Error" }, { status: 500 });
+    console.error("Proxy Error:", error);
+    return data({ success: false, message: "Internal server error" }, { status: 500 });
   }
-}
- 
-export async function loader({ request }) {
-  await authenticate.public.appProxy(request);
-  return data({ status: "Referral Handler Active" });
-}
+};
  
