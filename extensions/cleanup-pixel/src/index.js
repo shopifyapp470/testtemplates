@@ -1,54 +1,46 @@
-import {register} from "@shopify/web-pixels-extension";
- 
-//register(({ analytics, browser, init, settings }) => {
-    // Bootstrap and insert pixel script tag here
- 
-    // Sample subscribe to page view
+import { register } from "@shopify/web-pixels-extension";
  
 register(({ analytics, browser }) => {
-  // 1. UTM Source (Employee Email) capture karke session storage mein save karein
-  analytics.subscribe('page_viewed', async (event) => {
-    const url = new URL(event.context.document.location.href);
-    const employeeEmail = url.searchParams.get("utm_source");
-   
-    if (employeeEmail) {
-      await browser.sessionStorage.setItem("referred_employee", employeeEmail);
-    }
-  });
- 
-  // 2. Checkout complete hone par App Proxy ko hit karein
   analytics.subscribe('checkout_completed', async (event) => {
+    console.log("🏁 [PIXEL] Checkout Completed Event Triggered");
+ 
     try {
       const employeeEmail = await browser.sessionStorage.getItem("referred_employee");
-      if (!employeeEmail) return;
+      
+      if (!employeeEmail) {
+        console.warn("🚫 [PIXEL] No employee email found in session storage. Skipping.");
+        return;
+      }
  
       const checkout = event.data.checkout;
-      const shopDomain = event.context.window.location.hostname;
+      const payload = {
+        employeeEmail,
+        customerEmail: checkout.email,
+        orderId: checkout.order?.id,
+        orderNumber: checkout.order?.name,
+        totalAmount: checkout.totalPrice?.amount,
+        shop: event.context.window.location.hostname,
+      };
  
-      // ✅ FIX: Direct Render URL ki jagah App Proxy path use karein
-      // Signature verification ke liye window params (?shop=...&signature=...) bhejna zaroori hai
-      const searchParams = event.context.window.location.search;
-      const proxyUrl = `https://${shopDomain}/apps/public/track-handler${searchParams}`;
+      console.log("📤 [PIXEL] Sending data to backend:", payload);
  
-      await fetch(proxyUrl, {
+      const response = await fetch("https://shopify-rewards-app.onrender.com/app/custom-proxy/track-handler", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          employeeEmail,
-          customerEmail: checkout.email,
-          orderId: checkout.order?.id,
-          orderNumber: checkout.order?.name,
-          totalAmount: checkout.totalPrice?.amount,
-          shop: shopDomain,
-        }),
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
  
-      // Cleanup
-      await browser.sessionStorage.removeItem("referred_employee");
+      if (response.ok) {
+        const resData = await response.json();
+        console.log("🎉 [PIXEL] Backend Response Success:", resData);
+      } else {
+        console.error("❌ [PIXEL] Backend Error Status:", response.status);
+      }
+ 
     } catch (err) {
-      console.error("Pixel Tracking Error:", err);
+      console.error("🚨 [PIXEL] Fetch Catch Error:", err);
     }
   });
 });
+ 
