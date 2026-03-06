@@ -2,7 +2,7 @@
 
 client_id = "c0943780dc299003dfd4e67f03a03acd"
 name = "7n-shop-adminlive"
-application_url = "https://example.com"
+application_url = "https://testtemplates.onrenderlive.com"
 embedded = true
 
 [webhooks]
@@ -10,9 +10,28 @@ api_version = "2026-01"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = ""
+scopes = "read_customers,read_discounts,read_orders,read_price_rules,read_products,write_customers,write_discounts,write_orders,write_price_rules,write_products,write_themes,read_themes,write_content,read_content,write_pixels,read_pixels,read_customer_events"
+
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ ]
+redirect_urls = [
+  "https://testtemplates.onrenderlive.com/auth/callback",
+  "https://testtemplates.onrenderlive.com/auth/shopify/callback",
+  "https://testtemplates.onrenderlive.com/api/auth"
+]
+
+[app_proxy]
+url = "https://testtemplates.onrenderlive.com/app/custom-proxy"
+subpath = "public"
+prefix = "apps"
+
+
+[[webhooks.subscriptions]]
+  topics = [ "orders/cancelled", "checkouts/update", "orders/create" ]
+  uri = "/webhooks/orders/create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "customers/create", "customers/update" ]
+  uri = "/webhookscutomer"
