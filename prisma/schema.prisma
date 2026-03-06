@@ -105,3 +105,26 @@ model ReferralTracking {
   shop          String
   createdAt     DateTime @default(now())
 }
+
+model DigitalHubLink {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  url         String
+  description String?
+  category    String?
+  tag         String?
+  dateAdded   DateTime @default(now())
+  download    Boolean  @default(false)
+  shop        String
+}
+ 
+model EmployeeReferral {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  employeeEmail String   // Vishwas ka email (utm_source)
+  customerEmail String   // Customer ka email
+  orderId       String   @unique
+  orderNumber   String?
+  totalAmount   Float
+  shop          String
+  createdAt     DateTime @default(now())
+}

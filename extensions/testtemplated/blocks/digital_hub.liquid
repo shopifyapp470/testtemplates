@@ -1,0 +1,312 @@
+{{ 'digital-hub-style.css' | asset_url | stylesheet_tag }}
+ 
+<div class="digital-hub-main">
+  <aside class="sidebar-nav">
+    <div class="brand-logo">{{ block.settings.hub_title | default: "7nshop Digital Hub" }}</div>
+    <nav class="nav-container">
+      <ul class="nav-list">
+        <li class="nav-item">
+          <a href="javascript:void(0)" class="nav-link active" onclick="resetFilters(this)">Home (Overview)</a>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link dropdown-toggle" onclick="toggleDropdown(this)">
+            Content Hub <span style="float:right">▼</span>
+          </button>
+          <ul id="contentHubMenu" class="dropdown-menu show">
+            <li class="filter-group-label">BRANDS</li>
+            <div id="brand-checkboxes" class="checkbox-area"></div>
+           
+            <li class="filter-group-label">TAGS</li>
+            <div id="tag-checkboxes" class="checkbox-area"></div>
+ 
+            <li class="filter-group-label">OPTIONS</li>
+            <li>
+              <label class="filter-checkbox-label">
+                <input type="checkbox" id="recentFilter" onchange="applyMultiFilter()">
+                <span class="custom-check"></span> Recently Added
+              </label>
+            </li>
+          </ul>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+ 
+  <main class="content-area">
+    <header class="hub-header">
+      <div class="header-left">
+         <h2 class="title-purple">Digital Assets</h2>
+         <p style="margin-top:5px; color:#666;">Logged in: <strong>{{ customer.email }}</strong></p>
+      </div>
+      <div class="header-right">
+        <input type="text" id="linkSearch" class="search-input" placeholder="Search resources..." onkeyup="applyMultiFilter()">
+      </div>
+    </header>
+ 
+    <div class="links-container" id="linksList">
+        <p id="loading-msg" style="text-align:center; padding:50px;">Fetching resources...</p>
+    </div>
+ 
+    <div id="pagination" class="pagination-container" style="display:none;">
+      <button id="prevBtn" class="page-btn" onclick="changePage(-1)">Previous</button>
+      <span id="pageInfo">Page 1</span>
+      <button id="nextBtn" class="page-btn" onclick="changePage(1)">Next</button>
+    </div>
+  </main>
+</div>
+ 
+<script>
+let allAssets = [];
+let filteredAssets = [];
+let currentPage = 1;
+const perPage = 10;
+const userEmail = "{{ customer.email }}";
+ 
+// --- 1. Naya Tracking Function (Event Publish karne ke liye) ---
+function trackEmployeeClick(email, assetName) {
+    if (!window.analytics || !window.analytics.publish) {
+        console.warn("Shopify analytics not ready");
+        return;
+    }
+ 
+    try {
+        window.analytics.publish("track_customer_interaction", {
+            interaction_type: "employee_share_click",
+            utm_source: email,
+            asset_name: assetName,
+            value: 1,
+            timestamp: new Date().toISOString()
+        });
+ 
+        console.log("✅ track_customer_interaction sent");
+ 
+    } catch (err) {
+        console.error("❌ analytics.publish failed:", err);
+    }
+}
+ 
+function publishEvent(email, assetName) {
+    try {
+        analytics.publish("employee_share_click", {
+            utm_source: email,
+            asset_name: assetName,
+            timestamp: new Date().toISOString()
+        });
+        console.log("🚀 [SUCCESS] employee_share_click sent for:", email, "| Asset:", assetName);
+    } catch (err) {
+        console.error("❌ [PIXEL ERROR] Could not publish event:", err);
+    }
+}
+ 
+async function fetchAssets() {
+    try {
+        const response = await fetch('/apps/public?type=digital_hub');
+        const result = await response.json();
+       
+        if (result.success) {
+            allAssets = result.links || [];
+            buildSidebarFilters(allAssets);
+            applyMultiFilter();
+        } else {
+            document.getElementById('loading-msg').innerText = "Error: " + result.message;
+        }
+    } catch (e) {
+        document.getElementById('loading-msg').innerText = "Failed to load assets.";
+    }
+}
+ 
+function buildSidebarFilters(links) {
+    const brandContainer = document.getElementById('brand-checkboxes');
+    const categories = [...new Set(links.map(l => l.category).filter(c => c))];
+    brandContainer.innerHTML = categories.map(cat => `
+        <li>
+            <label class="filter-checkbox-label">
+                <input type="checkbox" class="brand-filter" value="${cat.toLowerCase()}" onchange="applyMultiFilter()">
+                <span class="custom-check"></span> ${cat}
+            </label>
+        </li>
+    `).join('');
+ 
+    const tagContainer = document.getElementById('tag-checkboxes');
+    let allTags = [];
+    links.forEach(link => {
+        if (link.tag) {
+            const tags = link.tag.split(',').map(t => t.trim().toLowerCase());
+            allTags = [...allTags, ...tags];
+        }
+    });
+    const uniqueTags = [...new Set(allTags.filter(t => t))];
+   
+    tagContainer.innerHTML = uniqueTags.map(tag => `
+        <li>
+            <label class="filter-checkbox-label">
+                <input type="checkbox" class="tag-filter" value="${tag}" onchange="applyMultiFilter()">
+                <span class="custom-check"></span> ${tag}
+            </label>
+        </li>
+    `).join('');
+}
+ 
+function applyMultiFilter() {
+    const searchVal = document.getElementById('linkSearch').value.toLowerCase().trim();
+    const checkedBrands = Array.from(document.querySelectorAll('.brand-filter:checked')).map(c => c.value);
+    const checkedTags = Array.from(document.querySelectorAll('.tag-filter:checked')).map(c => c.value);
+    const recentOnly = document.getElementById('recentFilter').checked;
+   
+    const now = new Date();
+ 
+    filteredAssets = allAssets.filter(item => {
+        const content = (item.name + (item.description || "") + (item.category || "") + (item.tag || "")).toLowerCase();
+        const matchesSearch = content.includes(searchVal);
+        const matchesBrand = checkedBrands.length === 0 || checkedBrands.includes((item.category || "").toLowerCase());
+       
+        let matchesTag = true;
+        if (checkedTags.length > 0) {
+            const itemTags = (item.tag || "").toLowerCase().split(',').map(t => t.trim());
+            matchesTag = checkedTags.some(tag => itemTags.includes(tag));
+        }
+ 
+        let matchesRecent = true;
+        if (recentOnly) {
+            const date = new Date(item.dateAdded);
+            matchesRecent = (now - date) <= (24 * 60 * 60 * 1000);
+        }
+ 
+        return matchesSearch && matchesBrand && matchesTag && matchesRecent;
+    });
+ 
+    currentPage = 1;
+    renderUI();
+}
+ 
+function copyToClipboard(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+        const originalText = btn.innerText;
+        btn.innerText = "✓ Copied!";
+        btn.classList.add('copy-success');
+       
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.classList.remove('copy-success');
+        }, 2000);
+    }).catch(err => {
+        console.error('Copy failed', err);
+    });
+}
+ 
+function renderUI() {
+    const list = document.getElementById('linksList');
+    const start = (currentPage - 1) * perPage;
+    const items = filteredAssets.slice(start, start + perPage);
+ 
+    if (items.length === 0) {
+        list.innerHTML = "<div style='text-align:center; padding:50px;'>No assets found.</div>";
+        document.getElementById('pagination').style.display = 'none';
+        return;
+    }
+ 
+    list.innerHTML = items.map((item, i) => {
+        const tracking = `${item.url}${item.url.includes('?') ? '&' : '?'}utm_source=${userEmail}&utm_medium=referral`;
+        const qr = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(tracking)}`;
+ 
+        // --- 2. Button ke onclick mein trackEmployeeClick() add kiya gaya hai ---
+        return `
+        <div class="link-item-card">
+          <div class="card-body">
+            <span class="category-tag">${item.category || 'General'}</span>
+            <h3 class="asset-title">${item.name}</h3>
+            <p class="asset-desc">${item.description || ''}</p>
+            <p class="asset-date">Added: ${new Date(item.dateAdded).toLocaleDateString('en-GB')}</p>
+            <div style="margin-top:10px;">
+                ${(item.tag || "").split(',').map(t => t.trim() ? `<span class="tag-badge">#${t.trim()}</span>` : "").join('')}
+            </div>
+          </div>
+          <div class="card-actions">
+            <div class="button-group">
+              <button class="action-tab" onclick="handleAction(this, 'share-${i}')">Share Link</button>
+              <button class="action-tab" onclick="handleAction(this, 'qr-${i}')">QR Code</button>
+              ${item.download ? `<button class="action-tab" onclick="handleAction(this, 'dl-${i}')">Download</button>` : ''}
+            </div>
+            <div class="panel-container">
+              <div id="share-${i}" class="info-panel hide">
+                <input type="text" value="${tracking}" readonly class="link-input">
+               <button
+  onclick="copyToClipboard('${tracking}', this);
+           trackEmployeeClick('${userEmail}', '${item.name.replace(/'/g, "\\'")}')"
+  class="main-btn"
+  style="background:#b1a0da; width:40%; margin-top:10px; cursor:pointer;"
+>
+  Copy Trackable Link
+</button>
+              </div>
+              <div id="qr-${i}" class="info-panel hide">
+                <img src="${qr}" alt="QR" style="margin:0 auto; display:block;">
+                <p style="font-size:11px; margin-top:8px; color:#888; text-align:center;">Tracked for: ${userEmail}</p>
+              </div>
+              <div id="dl-${i}" class="info-panel hide">
+                <a href="${item.url}" download class="main-btn" style="background:##b1a0da; text-decoration:none; display:block; text-align:center;">Download File</a>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+ 
+    updatePagination();
+}
+ 
+function handleAction(btn, id) {
+    const parent = btn.closest('.card-actions');
+    const panel = parent.querySelector('#' + id);
+    const isOpen = !panel.classList.contains('hide');
+    parent.querySelectorAll('.info-panel').forEach(p => p.classList.add('hide'));
+    parent.querySelectorAll('.action-tab').forEach(b => b.classList.remove('active'));
+    if (!isOpen) {
+        panel.classList.remove('hide');
+        btn.classList.add('active');
+    }
+}
+ 
+function updatePagination() {
+    const totalPages = Math.ceil(filteredAssets.length / perPage);
+    const pagDiv = document.getElementById('pagination');
+    if(pagDiv) {
+      pagDiv.style.display = filteredAssets.length > perPage ? 'flex' : 'none';
+      document.getElementById('pageInfo').innerText = `Page ${currentPage} of ${totalPages || 1}`;
+      document.getElementById('prevBtn').disabled = currentPage === 1;
+      document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+    }
+}
+ 
+function changePage(dir) {
+    currentPage += dir;
+    renderUI();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+ 
+function toggleDropdown(btn) {
+    document.getElementById('contentHubMenu').classList.toggle('show');
+}
+ 
+function resetFilters(el) {
+    document.getElementById('linkSearch').value = "";
+    document.querySelectorAll('.brand-filter, .tag-filter').forEach(c => c.checked = false);
+    document.getElementById('recentFilter').checked = false;
+    applyMultiFilter();
+}
+ 
+document.addEventListener('DOMContentLoaded', fetchAssets);
+ 
+const urlParams = new URLSearchParams(window.location.search);
+const empEmail = urlParams.get('utm_source');
+</script>
+ 
+{% schema %}
+{
+  "name": "Digital Hub Assets",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "hub_title", "label": "Hub Title", "default": "7nshop Digital Hub" }
+  ]
+}
+{% endschema %}
+ 

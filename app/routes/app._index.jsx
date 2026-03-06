@@ -3,11 +3,59 @@ import { useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { syncRewardTemplate } from "../lib/theme-sync.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-
-  return null;
+  // Admin aur session ko authenticate karein
+  const { admin, session } = await authenticate.admin(request);
+ 
+  // 1. Aapka existing theme sync logic
+  const result = await syncRewardTemplate(admin, session);
+ 
+  try {
+    // 2. Web Pixel Create karne ki koshish karein
+    // Isse 'webPixels' query error nahi aayega kyunki hum mutation use kar rahe hain
+    const response = await admin.graphql(
+      `#graphql
+      mutation webPixelCreate($webPixel: WebPixelInput!) {
+        webPixelCreate(webPixel: $webPixel) {
+          userErrors {
+            field
+            message
+          }
+          webPixel {
+            id
+            settings
+          }
+        }
+      }`,
+      {
+        variables: {
+          webPixel: {
+            // Aapke TOML ke field 'accountID' ke mutabiq
+            settings: { accountID: "1" }
+          },
+        },
+      }
+    );
+ 
+    const data = await response.json();
+    const errors = data.data?.webPixelCreate?.userErrors || [];
+ 
+    // Error handling (Agar pixel pehle se hai toh message dikhayega)
+    if (errors.length > 0) {
+      console.log("ℹ️ Pixel Status:", errors[0].message);
+    } else {
+      console.log("✅ Web Pixel Registered successfully");
+    }
+ 
+  } catch (error) {
+    // Network ya execution error handle karein
+    console.error("❌ Pixel Sync Error:", error.message);
+  }
+ 
+  // 3. Theme sync result aur shop session return karein
+  return Response.json({ ...result, shop: session.shop });
 };
 
 export const action = async ({ request }) => {

@@ -231,6 +231,36 @@ function copyReferralLink() {
   }
 </script>
 
+{% if customer %}
+<div class="referral-box" style="padding: 20px; background: #f4f6f8; border-radius: 8px; border: 1px solid #dfe3e8; margin-top: 20px;">
+  <h3 style="margin-top: 0;">Invite & Earn</h3>
+  <p>Apne doston ke saath niche wala link share karein:</p>
+ 
+  <div style="display: flex; gap: 10px; align-items: center;">
+    {% comment %} Link mein email ID pass ho rahi hai {% endcomment %}
+    {% capture ref_url %}{{ shop.url }}?utm_source={{ customer.email | url_encode }}{% endcapture %}
+   
+    <input type="text" value="{{ ref_url }}" id="refLink" readonly
+           style="flex: 1; padding: 10px; border: 1px solid #c4cdd5; border-radius: 4px;">
+   
+    <button onclick="copyRef()" style="background: #008060; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+      Copy Link
+    </button>
+  </div>
+</div>
+ 
+<script>
+function copyRef() {
+  var copyText = document.getElementById("refLink");
+  copyText.select();
+  copyText.setSelectionRange(0, 99999); // Mobile ke liye
+  navigator.clipboard.writeText(copyText.value);
+ 
+  alert("Referral Link Copy Ho Gaya: " + copyText.value);
+}
+</script>
+{% endif %}
+
 {% schema %}
 {
   "name": "Reward Order History",
