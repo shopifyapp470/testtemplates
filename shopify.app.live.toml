@@ -2,7 +2,7 @@
 
 client_id = "c0943780dc299003dfd4e67f03a03acd"
 name = "7n-shop-adminlive"
-application_url = "https://testtemplates.onrenderlive.com"
+application_url = "https://sevennshopadminlive-uq5r.onrender.com"
 embedded = true
 
 [webhooks]
@@ -17,13 +17,13 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://testtemplates.onrenderlive.com/auth/callback",
-  "https://testtemplates.onrenderlive.com/auth/shopify/callback",
-  "https://testtemplates.onrenderlive.com/api/auth"
+  "https://sevennshopadminlive-uq5r.onrender.com/auth/callback",
+  "https://sevennshopadminlive-uq5r.onrender.com/auth/shopify/callback",
+  "https://sevennshopadminlive-uq5r.onrender.com/api/auth"
 ]
 
 [app_proxy]
-url = "https://testtemplates.onrenderlive.com/app/custom-proxy"
+url = "https://sevennshopadminlive-uq5r.onrender.com/app/custom-proxy"
 subpath = "public"
 prefix = "apps"
 
